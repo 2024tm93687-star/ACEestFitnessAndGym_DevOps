@@ -1,11 +1,14 @@
 import os
 import io
 import csv
+import sqlite3
+from datetime import datetime
 
 from flask import Flask, jsonify, abort, request, Response
 
 class ACEestService:
     def __init__(self):
+        self.db_name = os.getenv("ACEEST_DB_NAME", "aceest_fitness.db")
         self.programs = {
             "Fat Loss (FL)": {
                 "workout": "Back Squat, Cardio, Bench, Deadlift, Recovery",
@@ -29,8 +32,40 @@ class ACEestService:
                 "slug": "beginner-bg"
             }
         }
-        self.clients = []
         self.slug_map = {data['slug']: name for name, data in self.programs.items()}
+        self.init_db()
+
+    def _connect(self):
+        conn = sqlite3.connect(self.db_name)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def init_db(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS clients (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE,
+                    age INTEGER,
+                    weight REAL,
+                    program TEXT,
+                    calories INTEGER
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS progress (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    client_name TEXT,
+                    week TEXT,
+                    adherence INTEGER
+                )
+                """
+            )
+            conn.commit()
 
     def get_program_names(self):
         return list(self.programs.keys())
@@ -68,42 +103,94 @@ class ACEestService:
 
         age = int(payload.get("age", 0) or 0)
         weight = float(payload.get("weight", 0) or 0)
-        adherence = int(payload.get("adherence", 0) or 0)
-        notes = (payload.get("notes") or "").strip()
 
         calorie_factor = self.programs[program]["calorie_factor"]
-        estimated_calories = int(weight * calorie_factor) if weight > 0 else None
+        calories = int(weight * calorie_factor)
+
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO clients (name, age, weight, program, calories)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (name, age, weight, program, calories),
+            )
+            conn.commit()
 
         client = {
             "name": name,
             "age": age,
             "weight": weight,
             "program": program,
-            "adherence": adherence,
-            "notes": notes,
-            "estimated_calories": estimated_calories,
+            "calories": calories,
         }
-        self.clients.append(client)
         return client, None
 
     def get_clients(self):
-        return self.clients
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT name, age, weight, program, calories FROM clients ORDER BY id")
+            rows = cur.fetchall()
+        return [dict(row) for row in rows]
+
+    def get_client(self, name):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT name, age, weight, program, calories FROM clients WHERE name=?",
+                (name,),
+            )
+            row = cur.fetchone()
+        return dict(row) if row else None
+
+    def save_progress(self, payload):
+        name = (payload.get("name") or "").strip()
+        if not name:
+            return None, "Name is required."
+
+        adherence = int(payload.get("adherence", 0) or 0)
+        week = payload.get("week") or datetime.now().strftime("Week %U - %Y")
+
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO progress (client_name, week, adherence) VALUES (?, ?, ?)",
+                (name, week, adherence),
+            )
+            conn.commit()
+
+        return {"client_name": name, "week": week, "adherence": adherence}, None
+
+    def get_progress(self, name):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT client_name, week, adherence FROM progress WHERE client_name=? ORDER BY id",
+                (name,),
+            )
+            rows = cur.fetchall()
+        return [dict(row) for row in rows]
+
+    def reset_data(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM progress")
+            cur.execute("DELETE FROM clients")
+            conn.commit()
 
     def export_clients_csv(self):
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["Name", "Age", "Weight", "Program", "Adherence", "Notes"])
-        for client in self.clients:
-            writer.writerow(
-                [
-                    client["name"],
-                    client["age"],
-                    client["weight"],
-                    client["program"],
-                    client["adherence"],
-                    client["notes"],
-                ]
-            )
+        writer.writerow(["Name", "Age", "Weight", "Program", "Calories"])
+        for client in self.get_clients():
+            writer.writerow([
+                client["name"],
+                client["age"],
+                client["weight"],
+                client["program"],
+                client["calories"],
+            ])
         return output.getvalue()
 
 service = ACEestService()
@@ -117,7 +204,10 @@ def welcome():
             '/programs',
             '/programs/<slug>',
             '/clients',
-            '/clients/export'
+            '/clients/<name>',
+            '/clients/export',
+            '/progress',
+            '/progress/<name>'
         ]
     })
 
@@ -149,6 +239,14 @@ def clients():
     return jsonify({'message': f"Client {client['name']} saved successfully.", 'client': client}), 201
 
 
+@app.route('/clients/<name>')
+def client_detail(name):
+    client = service.get_client(name)
+    if client is None:
+        abort(404, description='Client not found')
+    return jsonify(client)
+
+
 @app.route('/clients/export')
 def export_clients():
     csv_content = service.export_clients_csv()
@@ -157,6 +255,21 @@ def export_clients():
         mimetype='text/csv',
         headers={'Content-Disposition': 'attachment; filename=clients.csv'}
     )
+
+
+@app.route('/progress', methods=['POST'])
+def progress():
+    payload = request.get_json(silent=True) or {}
+    record, error = service.save_progress(payload)
+    if error:
+        return jsonify({'error': error}), 400
+    return jsonify({'message': 'Weekly progress logged', 'progress': record}), 201
+
+
+@app.route('/progress/<name>')
+def progress_detail(name):
+    data = service.get_progress(name)
+    return jsonify({'progress': data, 'count': len(data)})
 
 @app.errorhandler(404)
 def handle_not_found(error):
