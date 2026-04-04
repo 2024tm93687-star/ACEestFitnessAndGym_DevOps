@@ -4,6 +4,8 @@ import os
 import random
 import sqlite3
 
+_rng = random.SystemRandom()
+
 from flask import Flask, Response, abort, jsonify, request
 
 
@@ -202,12 +204,12 @@ class ACEestService:
         ex_per_day = 3 if days < 4 else 4
         plan = []
         for day in weekly_days:
-            for ex in random.sample(pool, k=min(ex_per_day, len(pool))):
+            for ex in _rng.sample(pool, k=min(ex_per_day, len(pool))):
                 plan.append({
                     "day": day,
                     "exercise": ex,
-                    "sets": random.randint(*sets_range),
-                    "reps": random.randint(*reps_range),
+                    "sets": _rng.randint(*sets_range),
+                    "reps": _rng.randint(*reps_range),
                 })
         return {"client_name": client_name, "experience": experience, "days": days, "plan": plan}, None
 
