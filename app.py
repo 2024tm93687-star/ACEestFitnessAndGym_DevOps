@@ -175,6 +175,19 @@ class ACEestService:
             rows = cur.fetchall()
         return [dict(row) for row in rows]
 
+    def get_progress_chart(self, name):
+        records = self.get_progress(name)
+        if not records:
+            return None
+
+        weeks = [item["week"] for item in records]
+        adherence = [item["adherence"] for item in records]
+        return {
+            "client_name": name,
+            "weeks": weeks,
+            "adherence": adherence,
+        }
+
     def reset_data(self):
         with self._connect() as conn:
             cur = conn.cursor()
@@ -210,7 +223,8 @@ def welcome():
             '/clients/<name>',
             '/clients/export',
             '/progress',
-            '/progress/<name>'
+            '/progress/<name>',
+            '/progress/<name>/chart'
         ]
     })
 
@@ -273,6 +287,14 @@ def progress():
 def progress_detail(name):
     data = service.get_progress(name)
     return jsonify({'progress': data, 'count': len(data)})
+
+
+@app.route('/progress/<name>/chart')
+def progress_chart(name):
+    data = service.get_progress_chart(name)
+    if data is None:
+        return jsonify({'error': 'No progress data available for this client'}), 404
+    return jsonify(data)
 
 @app.errorhandler(404)
 def handle_not_found(error):

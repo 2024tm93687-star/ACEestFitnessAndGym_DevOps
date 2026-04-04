@@ -142,3 +142,25 @@ def test_get_progress_for_client(client):
     data = response.get_json()
     assert data['count'] == 1
     assert data['progress'][0]['week'] == 'Week 02 - 2026'
+
+
+def test_get_progress_chart_for_client(client):
+    client.post('/progress', json={
+        'name': 'Asha',
+        'adherence': 80,
+        'week': 'Week 03 - 2026'
+    })
+
+    response = client.get('/progress/Asha/chart')
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['client_name'] == 'Asha'
+    assert data['weeks'] == ['Week 03 - 2026']
+    assert data['adherence'] == [80]
+
+
+def test_get_progress_chart_no_data(client):
+    response = client.get('/progress/Unknown/chart')
+    assert response.status_code == 404
+    data = response.get_json()
+    assert data['error'] == 'No progress data available for this client'
