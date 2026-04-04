@@ -95,7 +95,8 @@ class ACEestService:
                     calories INTEGER,
                     target_weight REAL,
                     target_adherence INTEGER,
-                    membership_expiry TEXT
+                    membership_expiry TEXT,
+                    membership_status TEXT
                 )
                 """
             )
@@ -103,6 +104,8 @@ class ACEestService:
             existing_cols = {row[1] for row in cur.fetchall()}
             if "membership_expiry" not in existing_cols:
                 cur.execute("ALTER TABLE clients ADD COLUMN membership_expiry TEXT")
+            if "membership_status" not in existing_cols:
+                cur.execute("ALTER TABLE clients ADD COLUMN membership_status TEXT")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS progress (
@@ -241,6 +244,7 @@ class ACEestService:
         target_weight = float(payload.get("target_weight") or 0) or None
         target_adherence = int(payload.get("target_adherence") or 0) or None
         membership_expiry = (payload.get("membership_expiry") or "").strip() or None
+        membership_status = (payload.get("membership_status") or "").strip() or None
         calories = int(weight * self.programs[program]["factor"]) if weight else None
 
         with self._connect() as conn:
@@ -248,10 +252,10 @@ class ACEestService:
             cur.execute(
                 """
                 INSERT OR REPLACE INTO clients
-                (name, age, height, weight, program, calories, target_weight, target_adherence, membership_expiry)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (name, age, height, weight, program, calories, target_weight, target_adherence, membership_expiry, membership_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (name, age, height, weight, program, calories, target_weight, target_adherence, membership_expiry),
+                (name, age, height, weight, program, calories, target_weight, target_adherence, membership_expiry, membership_status),
             )
             conn.commit()
 
@@ -263,7 +267,7 @@ class ACEestService:
             cur.execute(
                 """
                 SELECT name, age, height, weight, program, calories,
-                       target_weight, target_adherence, membership_expiry
+                       target_weight, target_adherence, membership_expiry, membership_status
                 FROM clients ORDER BY name
                 """
             )
@@ -276,7 +280,7 @@ class ACEestService:
             cur.execute(
                 """
                 SELECT name, age, height, weight, program, calories,
-                       target_weight, target_adherence, membership_expiry
+                       target_weight, target_adherence, membership_expiry, membership_status
                 FROM clients WHERE name=?
                 """,
                 (name,),
@@ -311,13 +315,13 @@ class ACEestService:
         writer = csv.writer(output)
         writer.writerow([
             "Name", "Age", "Height", "Weight", "Program",
-            "Calories", "TargetWeight", "TargetAdherence", "MembershipExpiry",
+            "Calories", "TargetWeight", "TargetAdherence", "MembershipExpiry", "MembershipStatus",
         ])
         for c in rows:
             writer.writerow([
                 c.get("name"), c.get("age"), c.get("height"), c.get("weight"),
                 c.get("program"), c.get("calories"), c.get("target_weight"),
-                c.get("target_adherence"), c.get("membership_expiry"),
+                c.get("target_adherence"), c.get("membership_expiry"), c.get("membership_status"),
             ])
         return output.getvalue()
 
@@ -474,6 +478,31 @@ class ACEestService:
             "weights": [r["weight"] for r in rows],
         }
 
+    def get_membership(self, client_name):
+        client = self.get_client(client_name)
+        if not client:
+            return None
+        return {
+            "client_name": client_name,
+            "membership_status": client.get("membership_status"),
+            "membership_expiry": client.get("membership_expiry"),
+        }
+
+    def update_membership(self, client_name, payload):
+        client = self.get_client(client_name)
+        if not client:
+            return None, "Client not found"
+        status = (payload.get("membership_status") or "").strip() or None
+        expiry = (payload.get("membership_expiry") or "").strip() or None
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE clients SET membership_status=?, membership_expiry=? WHERE name=?",
+                (status, expiry, client_name),
+            )
+            conn.commit()
+        return self.get_membership(client_name), None
+
     def get_bmi_info(self, client_name):
         client = self.get_client(client_name)
         if not client:
@@ -522,6 +551,7 @@ def welcome():
                 "/programs/<slug>",
                 "/clients",
                 "/clients/<name>",
+                "/clients/<name>/membership",
                 "/clients/<name>/summary",
                 "/clients/<name>/bmi",
                 "/clients/export",
@@ -585,6 +615,20 @@ def client_detail(name):
     if not client:
         return jsonify({"error": "Client not found"}), 404
     return jsonify(client)
+
+
+@app.route("/clients/<name>/membership", methods=["GET", "PATCH"])
+def client_membership(name):
+    if request.method == "GET":
+        data = service.get_membership(name)
+        if not data:
+            return jsonify({"error": "Client not found"}), 404
+        return jsonify(data)
+    payload = request.get_json(silent=True) or {}
+    result, error = service.update_membership(name, payload)
+    if error:
+        return jsonify({"error": error}), 404
+    return jsonify({"message": "Membership updated", "membership": result})
 
 
 @app.route("/clients/<name>/summary")
