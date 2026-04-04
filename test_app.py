@@ -88,7 +88,7 @@ def test_create_client_validation_error(client):
     })
     assert response.status_code == 400
     data = response.get_json()
-    assert data['error'] == 'Please fill client name and program.'
+    assert data['error'] == 'Name is required'
 
 
 def test_export_clients_csv(client):
