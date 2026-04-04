@@ -13,10 +13,11 @@ This service exposes simple JSON endpoints for fitness programs:
 5. `POST /clients` saves or updates a client record and calculates calories.
 6. `GET /clients/<name>` loads one client by name.
 7. `GET /clients/export` downloads client records as CSV.
-7. `POST /progress` saves weekly adherence progress.
-8. `GET /progress/<name>` fetches progress history for a client.
+8. `POST /progress` saves weekly adherence progress.
+9. `GET /progress/<name>` fetches progress history for a client.
+10. `GET /progress/<name>/chart` returns chart-ready progress arrays (weeks and adherence).
 
-The current API content is based on the latest ACEest Tkinter desktop version (v2.1.2) and has been converted into a Flask-based service for API and DevOps workflows, including SQLite persistence.
+The current API content is based on the latest ACEest Tkinter desktop version (v2.2.1) and has been converted into a Flask-based service for API and DevOps workflows, including SQLite persistence.
 
 ## Tech Stack
 
@@ -25,9 +26,9 @@ The current API content is based on the latest ACEest Tkinter desktop version (v
 3. Gunicorn
 4. SQLite3
 5. Pytest
-5. Docker and Docker Compose
-6. GitHub Actions
-7. Jenkins
+6. Docker and Docker Compose
+7. GitHub Actions
+8. Jenkins
 
 ## Repository Structure
 
@@ -279,6 +280,16 @@ Sample response for `GET /progress/Asha`:
 		}
 	],
 	"count": 1
+}
+```
+
+Sample response for `GET /progress/Asha/chart`:
+
+```json
+{
+	"client_name": "Asha",
+	"weeks": ["Week 01 - 2026", "Week 02 - 2026"],
+	"adherence": [90, 75]
 }
 ```
 
