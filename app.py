@@ -14,21 +14,21 @@ class ACEestService:
                 "workout": "Back Squat, Cardio, Bench, Deadlift, Recovery",
                 "diet": "Egg Whites, Chicken, Fish Curry",
                 "color": "#e74c3c",
-                "calorie_factor": 22,
+                "factor": 22,
                 "slug": "fat-loss-fl"
             },
             "Muscle Gain (MG)": {
                 "workout": "Squat, Bench, Deadlift, Press, Rows",
                 "diet": "Eggs, Biryani, Mutton Curry",
                 "color": "#2ecc71",
-                "calorie_factor": 35,
+                "factor": 35,
                 "slug": "muscle-gain-mg"
             },
             "Beginner (BG)": {
                 "workout": "Air Squats, Ring Rows, Push-ups",
                 "diet": "Balanced Tamil Meals",
                 "color": "#3498db",
-                "calorie_factor": 26,
+                "factor": 26,
                 "slug": "beginner-bg"
             }
         }
@@ -78,7 +78,9 @@ class ACEestService:
                 "workout": data["workout"],
                 "diet": data["diet"],
                 "color": data["color"],
-                "calorie_factor": data["calorie_factor"]
+                "factor": data["factor"],
+                # Backward-compatible alias for earlier API consumers.
+                "calorie_factor": data["factor"]
             }
             for name, data in self.programs.items()
         ]
@@ -88,6 +90,8 @@ class ACEestService:
         if not program_name:
             return None
         program = self.programs[program_name].copy()
+        # Backward-compatible alias for earlier API consumers.
+        program["calorie_factor"] = program["factor"]
         program["name"] = program_name
         return program
 
@@ -104,8 +108,7 @@ class ACEestService:
         age = int(payload.get("age", 0) or 0)
         weight = float(payload.get("weight", 0) or 0)
 
-        calorie_factor = self.programs[program]["calorie_factor"]
-        calories = int(weight * calorie_factor)
+        calories = int(weight * self.programs[program]["factor"])
 
         with self._connect() as conn:
             cur = conn.cursor()
