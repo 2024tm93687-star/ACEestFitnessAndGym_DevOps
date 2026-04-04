@@ -103,7 +103,7 @@ def test_export_clients_csv(client):
     assert response.status_code == 200
     assert 'text/csv' in response.content_type
     content = response.get_data(as_text=True)
-    assert 'Name,Age,Height,Weight,Program,Calories,TargetWeight,TargetAdherence' in content
+    assert 'Name,Age,Height,Weight,Program,Calories,TargetWeight,TargetAdherence,MembershipExpiry' in content
     assert 'Kumar' in content
 
 
@@ -240,3 +240,89 @@ def test_bmi_endpoint(client):
     data = response.get_json()
     assert data['client_name'] == 'Ravi'
     assert 'category' in data
+
+
+def test_login_success(client):
+    response = client.post('/auth/login', json={
+        'username': 'admin',
+        'password': 'admin'
+    })
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['username'] == 'admin'
+    assert data['role'] == 'Admin'
+
+
+def test_login_failure(client):
+    response = client.post('/auth/login', json={
+        'username': 'admin',
+        'password': 'wrong'
+    })
+    assert response.status_code == 401
+    data = response.get_json()
+    assert data['error'] == 'Invalid credentials'
+
+
+def test_ai_program_generation(client):
+    client.post('/clients', json={
+        'name': 'Priya',
+        'age': 26,
+        'height': 162,
+        'weight': 58,
+        'program': 'Fat Loss (FL) - 3 day'
+    })
+
+    response = client.post('/ai-program', json={
+        'client_name': 'Priya',
+        'experience': 'beginner'
+    })
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data['client_name'] == 'Priya'
+    assert data['experience'] == 'beginner'
+    assert data['days'] == 3
+    assert isinstance(data['plan'], list)
+    assert len(data['plan']) > 0
+    first = data['plan'][0]
+    assert 'day' in first
+    assert 'exercise' in first
+    assert 'sets' in first
+    assert 'reps' in first
+
+
+def test_ai_program_invalid_experience(client):
+    client.post('/clients', json={
+        'name': 'Priya',
+        'age': 26,
+        'height': 162,
+        'weight': 58,
+        'program': 'Fat Loss (FL) - 3 day'
+    })
+
+    response = client.post('/ai-program', json={
+        'client_name': 'Priya',
+        'experience': 'expert'
+    })
+    assert response.status_code == 400
+
+
+def test_ai_program_client_not_found(client):
+    response = client.post('/ai-program', json={
+        'client_name': 'Unknown',
+        'experience': 'beginner'
+    })
+    assert response.status_code == 404
+
+
+def test_create_client_with_membership_expiry(client):
+    response = client.post('/clients', json={
+        'name': 'Meena',
+        'age': 33,
+        'height': 168,
+        'weight': 65,
+        'program': 'Beginner (BG)',
+        'membership_expiry': '2026-12-31'
+    })
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data['client']['membership_expiry'] == '2026-12-31'

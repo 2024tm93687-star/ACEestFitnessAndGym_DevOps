@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import random
 import sqlite3
 
 from flask import Flask, Response, abort, jsonify, request
@@ -44,6 +45,19 @@ class ACEestService:
             },
         }
         self.slug_map = {p["slug"]: name for name, p in self.programs.items()}
+        self._exercises_pool = {
+            "Conditioning": [
+                "Running", "Cycling", "Rowing", "Burpees", "Jump Rope", "Kettlebell Swings",
+            ],
+            "Hypertrophy": [
+                "Leg Press", "Incline Dumbbell Press", "Lat Pulldown",
+                "Lateral Raise", "Bicep Curl", "Tricep Extension",
+            ],
+            "Full Body": [
+                "Push-Up", "Pull-Up", "Lunge", "Plank", "Dumbbell Row", "Dumbbell Press",
+            ],
+        }
+        self._weekly_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
         self.init_db()
 
     def _connect(self):
@@ -56,6 +70,19 @@ class ACEestService:
             cur = conn.cursor()
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE,
+                    password TEXT,
+                    role TEXT
+                )
+                """
+            )
+            cur.execute(
+                "INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', 'admin', 'Admin')"
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS clients (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT UNIQUE,
@@ -65,10 +92,15 @@ class ACEestService:
                     program TEXT,
                     calories INTEGER,
                     target_weight REAL,
-                    target_adherence INTEGER
+                    target_adherence INTEGER,
+                    membership_expiry TEXT
                 )
                 """
             )
+            cur.execute("PRAGMA table_info(clients)")
+            existing_cols = {row[1] for row in cur.fetchall()}
+            if "membership_expiry" not in existing_cols:
+                cur.execute("ALTER TABLE clients ADD COLUMN membership_expiry TEXT")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS progress (
@@ -125,7 +157,59 @@ class ACEestService:
             cur.execute("DELETE FROM metrics")
             cur.execute("DELETE FROM progress")
             cur.execute("DELETE FROM clients")
+            cur.execute("DELETE FROM users")
+            cur.execute(
+                "INSERT OR IGNORE INTO users (username, password, role) VALUES ('admin', 'admin', 'Admin')"
+            )
             conn.commit()
+
+    def login(self, username, password):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT username, role FROM users WHERE username=? AND password=?",
+                (username, password),
+            )
+            row = cur.fetchone()
+        return dict(row) if row else None
+
+    def generate_ai_program(self, client_name, experience):
+        valid_levels = ("beginner", "intermediate", "advanced")
+        if experience not in valid_levels:
+            return None, f"experience must be one of: {', '.join(valid_levels)}"
+
+        client = self.get_client(client_name)
+        if not client:
+            return None, "Client not found"
+
+        program_name = client.get("program", "")
+        if "Fat Loss" in program_name:
+            focus = "Conditioning"
+        elif "Muscle Gain" in program_name:
+            focus = "Hypertrophy"
+        else:
+            focus = "Full Body"
+
+        if experience == "beginner":
+            sets_range, reps_range, days = (2, 3), (8, 12), 3
+        elif experience == "intermediate":
+            sets_range, reps_range, days = (3, 4), (8, 15), 4
+        else:
+            sets_range, reps_range, days = (4, 5), (6, 15), 5
+
+        pool = self._exercises_pool[focus]
+        weekly_days = self._weekly_days[:days]
+        ex_per_day = 3 if days < 4 else 4
+        plan = []
+        for day in weekly_days:
+            for ex in random.sample(pool, k=min(ex_per_day, len(pool))):
+                plan.append({
+                    "day": day,
+                    "exercise": ex,
+                    "sets": random.randint(*sets_range),
+                    "reps": random.randint(*reps_range),
+                })
+        return {"client_name": client_name, "experience": experience, "days": days, "plan": plan}, None
 
     def get_program_names(self):
         return list(self.programs.keys())
@@ -154,6 +238,7 @@ class ACEestService:
         weight = float(payload.get("weight") or 0) or None
         target_weight = float(payload.get("target_weight") or 0) or None
         target_adherence = int(payload.get("target_adherence") or 0) or None
+        membership_expiry = (payload.get("membership_expiry") or "").strip() or None
         calories = int(weight * self.programs[program]["factor"]) if weight else None
 
         with self._connect() as conn:
@@ -161,10 +246,10 @@ class ACEestService:
             cur.execute(
                 """
                 INSERT OR REPLACE INTO clients
-                (name, age, height, weight, program, calories, target_weight, target_adherence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (name, age, height, weight, program, calories, target_weight, target_adherence, membership_expiry)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (name, age, height, weight, program, calories, target_weight, target_adherence),
+                (name, age, height, weight, program, calories, target_weight, target_adherence, membership_expiry),
             )
             conn.commit()
 
@@ -175,7 +260,8 @@ class ACEestService:
             cur = conn.cursor()
             cur.execute(
                 """
-                SELECT name, age, height, weight, program, calories, target_weight, target_adherence
+                SELECT name, age, height, weight, program, calories,
+                       target_weight, target_adherence, membership_expiry
                 FROM clients ORDER BY name
                 """
             )
@@ -187,7 +273,8 @@ class ACEestService:
             cur = conn.cursor()
             cur.execute(
                 """
-                SELECT name, age, height, weight, program, calories, target_weight, target_adherence
+                SELECT name, age, height, weight, program, calories,
+                       target_weight, target_adherence, membership_expiry
                 FROM clients WHERE name=?
                 """,
                 (name,),
@@ -221,28 +308,15 @@ class ACEestService:
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([
-            "Name",
-            "Age",
-            "Height",
-            "Weight",
-            "Program",
-            "Calories",
-            "TargetWeight",
-            "TargetAdherence",
+            "Name", "Age", "Height", "Weight", "Program",
+            "Calories", "TargetWeight", "TargetAdherence", "MembershipExpiry",
         ])
         for c in rows:
-            writer.writerow(
-                [
-                    c.get("name"),
-                    c.get("age"),
-                    c.get("height"),
-                    c.get("weight"),
-                    c.get("program"),
-                    c.get("calories"),
-                    c.get("target_weight"),
-                    c.get("target_adherence"),
-                ]
-            )
+            writer.writerow([
+                c.get("name"), c.get("age"), c.get("height"), c.get("weight"),
+                c.get("program"), c.get("calories"), c.get("target_weight"),
+                c.get("target_adherence"), c.get("membership_expiry"),
+            ])
         return output.getvalue()
 
     def save_progress(self, payload):
@@ -441,6 +515,7 @@ def welcome():
         {
             "message": "Welcome to ACEest Fitness and Gym API",
             "routes": [
+                "/auth/login",
                 "/programs",
                 "/programs/<slug>",
                 "/clients",
@@ -456,9 +531,23 @@ def welcome():
                 "/metrics",
                 "/metrics/<name>",
                 "/metrics/<name>/weight-chart",
+                "/ai-program",
             ],
         }
     )
+
+
+@app.route("/auth/login", methods=["POST"])
+def auth_login():
+    payload = request.get_json(silent=True) or {}
+    username = (payload.get("username") or "").strip()
+    password = (payload.get("password") or "").strip()
+    if not username or not password:
+        return jsonify({"error": "username and password are required"}), 400
+    user = service.login(username, password)
+    if not user:
+        return jsonify({"error": "Invalid credentials"}), 401
+    return jsonify({"message": "Login successful", "username": user["username"], "role": user["role"]})
 
 
 @app.route("/programs")
@@ -581,6 +670,20 @@ def weight_chart(name):
     if not data:
         return jsonify({"error": "No weight metrics available for this client"}), 404
     return jsonify(data)
+
+
+@app.route("/ai-program", methods=["POST"])
+def ai_program():
+    payload = request.get_json(silent=True) or {}
+    client_name = (payload.get("client_name") or "").strip()
+    experience = (payload.get("experience") or "").strip().lower()
+    if not client_name or not experience:
+        return jsonify({"error": "client_name and experience are required"}), 400
+    result, error = service.generate_ai_program(client_name, experience)
+    if error:
+        status = 404 if error == "Client not found" else 400
+        return jsonify({"error": error}), status
+    return jsonify(result), 201
 
 
 @app.errorhandler(404)
