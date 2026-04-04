@@ -1,6 +1,6 @@
 # ACEest Fitness and Gym DevOps
 
-A lightweight Flask API for fitness program data, with CI/CD automation through GitHub Actions and Jenkins.
+A lightweight Flask API for fitness program and client management data, with CI/CD automation through GitHub Actions and Jenkins.
 
 ## Project Overview
 
@@ -10,17 +10,21 @@ This service exposes simple JSON endpoints for fitness programs:
 2. `GET /programs` returns all supported program names.
 3. `GET /programs/<slug>` returns details for a specific program, including workout plan, nutrition plan, display color, and calorie factor.
 4. `GET /clients` returns saved client records.
-5. `POST /clients` saves a new client record and calculates estimated calories.
+5. `POST /clients` saves or updates a client record and calculates calories.
+6. `GET /clients/<name>` loads one client by name.
 6. `GET /clients/export` downloads client records as CSV.
+7. `POST /progress` saves weekly adherence progress.
+8. `GET /progress/<name>` fetches progress history for a client.
 
-The current API content is based on the latest ACEest Tkinter desktop version and has been converted into a Flask-based service for API and DevOps workflows.
+The current API content is based on the latest ACEest Tkinter desktop version and has been converted into a Flask-based service for API and DevOps workflows, including SQLite persistence.
 
 ## Tech Stack
 
 1. Python 3
 2. Flask
 3. Gunicorn
-4. Pytest
+4. SQLite3
+5. Pytest
 5. Docker and Docker Compose
 6. GitHub Actions
 7. Jenkins
@@ -31,10 +35,11 @@ The current API content is based on the latest ACEest Tkinter desktop version an
 2. `test_app.py`: unit and endpoint tests
 3. `requirements.txt`: runtime dependencies
 4. `requirements-dev.txt`: runtime plus test dependencies
-5. `Dockerfile`: container image definition
-6. `docker-compose.yml`: local container orchestration
-7. `.github/workflows/main.yml`: GitHub Actions CI pipeline
-8. `Jenkinsfile`: Jenkins CI/CD pipeline
+5. `aceest_fitness.db`: SQLite database file (auto-created at runtime)
+6. `Dockerfile`: container image definition
+7. `docker-compose.yml`: local container orchestration
+8. `.github/workflows/main.yml`: GitHub Actions CI pipeline
+9. `Jenkinsfile`: Jenkins CI/CD pipeline
 
 ## Local Setup and Execution
 
@@ -133,6 +138,20 @@ python -m pytest -q
 python -m pytest test_app.py -v
 ```
 
+## Database Persistence
+
+Client and progress data are persisted in SQLite.
+
+1. Default database file: `aceest_fitness.db`
+2. Override with environment variable: `ACEEST_DB_NAME`
+
+Example (PowerShell):
+
+```powershell
+$env:ACEEST_DB_NAME = "aceest_fitness.db"
+python app.py
+```
+
 ## API Response Overview
 
 Each program detail response includes:
@@ -170,9 +189,7 @@ Sample request for `POST /clients`:
 	"name": "Asha",
 	"age": 28,
 	"weight": 60,
-	"program": "Fat Loss (FL)",
-	"adherence": 85,
-	"notes": "Good consistency"
+	"program": "Fat Loss (FL)"
 }
 ```
 
@@ -186,10 +203,20 @@ Sample response for `POST /clients`:
 		"age": 28,
 		"weight": 60.0,
 		"program": "Fat Loss (FL)",
-		"adherence": 85,
-		"notes": "Good consistency",
-		"estimated_calories": 1320
+		"calories": 1320
 	}
+}
+```
+
+Sample response for `GET /clients/Asha`:
+
+```json
+{
+	"name": "Asha",
+	"age": 28,
+	"weight": 60.0,
+	"program": "Fat Loss (FL)",
+	"calories": 1320
 }
 ```
 
@@ -203,9 +230,7 @@ Sample response for `GET /clients`:
 			"age": 28,
 			"weight": 60.0,
 			"program": "Fat Loss (FL)",
-			"adherence": 85,
-			"notes": "Good consistency",
-			"estimated_calories": 1320
+			"calories": 1320
 		}
 	],
 	"count": 1
@@ -216,6 +241,44 @@ Sample response headers for `GET /clients/export`:
 
 1. Content-Type: `text/csv`
 2. Content-Disposition: `attachment; filename=clients.csv`
+
+Sample request for `POST /progress`:
+
+```json
+{
+	"name": "Asha",
+	"adherence": 90,
+	"week": "Week 01 - 2026"
+}
+```
+
+Sample response for `POST /progress`:
+
+```json
+{
+	"message": "Weekly progress logged",
+	"progress": {
+		"client_name": "Asha",
+		"week": "Week 01 - 2026",
+		"adherence": 90
+	}
+}
+```
+
+Sample response for `GET /progress/Asha`:
+
+```json
+{
+	"progress": [
+		{
+			"client_name": "Asha",
+			"week": "Week 01 - 2026",
+			"adherence": 90
+		}
+	],
+	"count": 1
+}
+```
 
 ## CI/CD Integration Overview
 
