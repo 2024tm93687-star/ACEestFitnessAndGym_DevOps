@@ -16,8 +16,15 @@ This service exposes simple JSON endpoints for fitness programs:
 8. `POST /progress` saves weekly adherence progress.
 9. `GET /progress/<name>` fetches progress history for a client.
 10. `GET /progress/<name>/chart` returns chart-ready progress arrays (weeks and adherence).
+11. `GET /clients/<name>/summary` returns profile + goals + progress summary + latest metrics.
+12. `GET /clients/<name>/bmi` returns BMI category and risk note.
+13. `POST /workouts` logs workout sessions (with optional exercises).
+14. `GET /workouts/<name>` returns workout history.
+15. `POST /metrics` logs body metrics.
+16. `GET /metrics/<name>` returns metric history.
+17. `GET /metrics/<name>/weight-chart` returns chart-ready weight trend data.
 
-The current API content is based on the latest ACEest Tkinter desktop version (v2.2.1) and has been converted into a Flask-based service for API and DevOps workflows, including SQLite persistence.
+The current API content is based on the latest ACEest Tkinter desktop version (v2.2.4) and has been converted into a Flask-based service for API and DevOps workflows, including SQLite persistence.
 
 ## Tech Stack
 
@@ -164,23 +171,26 @@ Each program detail response includes:
 5. `color`
 6. `factor`
 7. `calorie_factor` (backward-compatible alias)
+8. `desc`
 
 Example program slugs:
 
-1. `fat-loss-fl`
-2. `muscle-gain-mg`
+1. `fat-loss-fl-3-day`
+2. `fat-loss-fl-5-day`
+3. `muscle-gain-mg-ppl`
 3. `beginner-bg`
 
-Sample response for `GET /programs/fat-loss-fl`:
+Sample response for `GET /programs/fat-loss-fl-3-day`:
 
 ```json
 {
 	"factor": 22,
 	"calorie_factor": 22,
 	"color": "#e74c3c",
+	"desc": "3-day full-body fat loss",
 	"diet": "Egg Whites, Chicken, Fish Curry",
-	"name": "Fat Loss (FL)",
-	"slug": "fat-loss-fl",
+	"name": "Fat Loss (FL) - 3 day",
+	"slug": "fat-loss-fl-3-day",
 	"workout": "Back Squat, Cardio, Bench, Deadlift, Recovery"
 }
 ```
@@ -191,8 +201,11 @@ Sample request for `POST /clients`:
 {
 	"name": "Asha",
 	"age": 28,
+	"height": 165,
 	"weight": 60,
-	"program": "Fat Loss (FL)"
+	"program": "Fat Loss (FL) - 3 day",
+	"target_weight": 56,
+	"target_adherence": 85
 }
 ```
 
@@ -204,9 +217,12 @@ Sample response for `POST /clients`:
 	"client": {
 		"name": "Asha",
 		"age": 28,
+		"height": 165.0,
 		"weight": 60.0,
-		"program": "Fat Loss (FL)",
-		"calories": 1320
+		"program": "Fat Loss (FL) - 3 day",
+		"calories": 1320,
+		"target_weight": 56.0,
+		"target_adherence": 85
 	}
 }
 ```
@@ -217,9 +233,12 @@ Sample response for `GET /clients/Asha`:
 {
 	"name": "Asha",
 	"age": 28,
+	"height": 165.0,
 	"weight": 60.0,
-	"program": "Fat Loss (FL)",
-	"calories": 1320
+	"program": "Fat Loss (FL) - 3 day",
+	"calories": 1320,
+	"target_weight": 56.0,
+	"target_adherence": 85
 }
 ```
 
@@ -231,9 +250,12 @@ Sample response for `GET /clients`:
 		{
 			"name": "Asha",
 			"age": 28,
+			"height": 165.0,
 			"weight": 60.0,
-			"program": "Fat Loss (FL)",
-			"calories": 1320
+			"program": "Fat Loss (FL) - 3 day",
+			"calories": 1320,
+			"target_weight": 56.0,
+			"target_adherence": 85
 		}
 	],
 	"count": 1
@@ -244,6 +266,45 @@ Sample response headers for `GET /clients/export`:
 
 1. Content-Type: `text/csv`
 2. Content-Disposition: `attachment; filename=clients.csv`
+
+Sample response for `GET /clients/Asha/summary`:
+
+```json
+{
+	"client": {
+		"name": "Asha",
+		"age": 28,
+		"height": 165.0,
+		"weight": 60.0,
+		"program": "Fat Loss (FL) - 3 day",
+		"calories": 1320,
+		"target_weight": 56.0,
+		"target_adherence": 85
+	},
+	"program_desc": "3-day full-body fat loss",
+	"progress_summary": {
+		"weeks_logged": 2,
+		"average_adherence": 82.5
+	},
+	"last_metric": {
+		"date": "2026-04-04",
+		"weight": 60.0,
+		"waist": 76.0,
+		"bodyfat": 22.0
+	}
+}
+```
+
+Sample response for `GET /clients/Asha/bmi`:
+
+```json
+{
+	"client_name": "Asha",
+	"bmi": 22.0,
+	"category": "Normal",
+	"risk": "Low risk if active and strong."
+}
+```
 
 Sample request for `POST /progress`:
 
@@ -290,6 +351,65 @@ Sample response for `GET /progress/Asha/chart`:
 	"client_name": "Asha",
 	"weeks": ["Week 01 - 2026", "Week 02 - 2026"],
 	"adherence": [90, 75]
+}
+```
+
+Sample request for `POST /workouts`:
+
+```json
+{
+	"client_name": "Asha",
+	"date": "2026-04-04",
+	"workout_type": "Strength",
+	"duration_min": 60,
+	"notes": "Good session",
+	"exercises": [
+		{
+			"name": "Squat",
+			"sets": 3,
+			"reps": 5,
+			"weight": 80
+		}
+	]
+}
+```
+
+Sample response for `GET /workouts/Asha`:
+
+```json
+{
+	"workouts": [
+		{
+			"id": 1,
+			"date": "2026-04-04",
+			"workout_type": "Strength",
+			"duration_min": 60,
+			"notes": "Good session"
+		}
+	],
+	"count": 1
+}
+```
+
+Sample request for `POST /metrics`:
+
+```json
+{
+	"client_name": "Asha",
+	"date": "2026-04-04",
+	"weight": 60.0,
+	"waist": 76.0,
+	"bodyfat": 22.0
+}
+```
+
+Sample response for `GET /metrics/Asha/weight-chart`:
+
+```json
+{
+	"client_name": "Asha",
+	"dates": ["2026-04-04", "2026-04-11"],
+	"weights": [60.0, 59.2]
 }
 ```
 
