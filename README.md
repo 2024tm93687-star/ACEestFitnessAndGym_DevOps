@@ -166,6 +166,32 @@ Deployment behavior:
 3. DEV maps host port `5001` to container `5000`
 4. PROD maps host port `5000` to container `5000`
 
+### Add Pipeline in Jenkins (UI Steps)
+
+Use these steps to create this project pipeline in Jenkins:
+
+1. Open Jenkins dashboard.
+2. Select `New Item`.
+3. Enter a job name, select `Pipeline`, then click `OK`.
+4. In the job configuration page, open `Pipeline` section.
+5. Set `Definition` to `Pipeline script from SCM`.
+6. Set `SCM` to `Git`.
+7. Add repository URL.
+8. Add credentials if repository access is private.
+9. Set branch specifier (for example `*/develop`, `*/main`, or feature branch).
+10. Set `Script Path` to `Jenkinsfile`.
+11. Click `Save`.
+12. Click `Build Now` to trigger the pipeline.
+
+Optional webhook trigger setup:
+
+1. In Jenkins job, enable `GitHub hook trigger for GITScm polling`.
+2. In GitHub repository webhooks, configure payload URL as:
+
+```text
+https://<your-jenkins-or-ngrok-url>/github-webhook/
+```
+
 ### Jenkins Manual Recovery Commands (Inside Jenkins Container)
 
 If your Jenkins job fails with errors such as `python3: not found` or `docker: not found`, you can manually install required tools inside the running Jenkins container.
@@ -190,6 +216,32 @@ docker --version
 ```
 
 4. Exit the container and re-run the Jenkins pipeline.
+
+### Ngrok Setup for GitHub Webhooks to Jenkins
+
+If Jenkins is running locally, ngrok can expose Jenkins to GitHub webhooks.
+
+1. Start ngrok for the Jenkins port (example 8080):
+
+```bash
+ngrok http 8080
+```
+
+2. Copy the generated HTTPS URL from ngrok.
+
+3. In GitHub repository settings, add or update a webhook:
+
+```text
+https://<your-ngrok-id>.ngrok-free.app/github-webhook/
+```
+
+4. Set webhook content type to `application/json`.
+
+5. In Jenkins job configuration, enable the GitHub webhook trigger.
+
+6. Keep ngrok running while testing webhook events.
+
+7. If ngrok URL changes, update the webhook payload URL in GitHub.
 
 ## Common Commands
 
