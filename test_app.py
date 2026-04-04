@@ -367,6 +367,31 @@ def test_update_membership(client):
     assert data['membership']['membership_expiry'] == '2025-12-31'
 
 
+def test_membership_end_alias_roundtrip(client):
+    create_resp = client.post('/clients', json={
+        'name': 'Latha',
+        'age': 34,
+        'height': 160,
+        'weight': 62,
+        'program': 'Beginner (BG)',
+        'membership_status': 'Active',
+        'membership_end': '2026-10-31'
+    })
+    assert create_resp.status_code == 201
+    create_data = create_resp.get_json()
+    assert create_data['client']['membership_end'] == '2026-10-31'
+    assert create_data['client']['membership_expiry'] == '2026-10-31'
+
+    patch_resp = client.patch('/clients/Latha/membership', json={
+        'membership_status': 'Expired',
+        'membership_end': '2026-08-01'
+    })
+    assert patch_resp.status_code == 200
+    patch_data = patch_resp.get_json()
+    assert patch_data['membership']['membership_end'] == '2026-08-01'
+    assert patch_data['membership']['membership_expiry'] == '2026-08-01'
+
+
 def test_membership_client_not_found(client):
     response = client.get('/clients/Unknown/membership')
     assert response.status_code == 404
