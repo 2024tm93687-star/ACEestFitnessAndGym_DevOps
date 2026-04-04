@@ -1,32 +1,35 @@
 import os
+import io
+import csv
 
-from flask import Flask, jsonify, abort
+from flask import Flask, jsonify, abort, request, Response
 
 class ACEestService:
     def __init__(self):
         self.programs = {
             "Fat Loss (FL)": {
-                "workout": "Mon: Back Squat 5x5 + Core\nTue: EMOM 20min Assault Bike\nWed: Bench Press + 21-15-9\nThu: Deadlift + Box Jumps\nFri: Zone 2 Cardio 30min",
-                "diet": "Breakfast: Egg Whites + Oats\nLunch: Grilled Chicken + Brown Rice\nDinner: Fish Curry + Millet Roti\nTarget: ~2000 kcal",
+                "workout": "Back Squat, Cardio, Bench, Deadlift, Recovery",
+                "diet": "Egg Whites, Chicken, Fish Curry",
                 "color": "#e74c3c",
                 "calorie_factor": 22,
                 "slug": "fat-loss-fl"
             },
             "Muscle Gain (MG)": {
-                "workout": "Mon: Squat 5x5\nTue: Bench 5x5\nWed: Deadlift 4x6\nThu: Front Squat 4x8\nFri: Incline Press 4x10\nSat: Barbell Rows 4x10",
-                "diet": "Breakfast: Eggs + Peanut Butter Oats\nLunch: Chicken Biryani\nDinner: Mutton Curry + Rice\nTarget: ~3200 kcal",
+                "workout": "Squat, Bench, Deadlift, Press, Rows",
+                "diet": "Eggs, Biryani, Mutton Curry",
                 "color": "#2ecc71",
                 "calorie_factor": 35,
                 "slug": "muscle-gain-mg"
             },
             "Beginner (BG)": {
-                "workout": "Full Body Circuit:\n- Air Squats\n- Ring Rows\n- Push-ups\nFocus: Technique & Consistency",
-                "diet": "Balanced Tamil Meals\nIdli / Dosa / Rice + Dal\nProtein Target: 120g/day",
+                "workout": "Air Squats, Ring Rows, Push-ups",
+                "diet": "Balanced Tamil Meals",
                 "color": "#3498db",
                 "calorie_factor": 26,
                 "slug": "beginner-bg"
             }
         }
+        self.clients = []
         self.slug_map = {data['slug']: name for name, data in self.programs.items()}
 
     def get_program_names(self):
@@ -53,6 +56,56 @@ class ACEestService:
         program["name"] = program_name
         return program
 
+    def add_client(self, payload):
+        name = (payload.get("name") or "").strip()
+        program = payload.get("program")
+
+        if not name or not program:
+            return None, "Please fill client name and program."
+
+        if program not in self.programs:
+            return None, "Invalid program selected."
+
+        age = int(payload.get("age", 0) or 0)
+        weight = float(payload.get("weight", 0) or 0)
+        adherence = int(payload.get("adherence", 0) or 0)
+        notes = (payload.get("notes") or "").strip()
+
+        calorie_factor = self.programs[program]["calorie_factor"]
+        estimated_calories = int(weight * calorie_factor) if weight > 0 else None
+
+        client = {
+            "name": name,
+            "age": age,
+            "weight": weight,
+            "program": program,
+            "adherence": adherence,
+            "notes": notes,
+            "estimated_calories": estimated_calories,
+        }
+        self.clients.append(client)
+        return client, None
+
+    def get_clients(self):
+        return self.clients
+
+    def export_clients_csv(self):
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Name", "Age", "Weight", "Program", "Adherence", "Notes"])
+        for client in self.clients:
+            writer.writerow(
+                [
+                    client["name"],
+                    client["age"],
+                    client["weight"],
+                    client["program"],
+                    client["adherence"],
+                    client["notes"],
+                ]
+            )
+        return output.getvalue()
+
 service = ACEestService()
 app = Flask(__name__)
 
@@ -60,7 +113,12 @@ app = Flask(__name__)
 def welcome():
     return jsonify({
         'message': 'Welcome to ACEest Fitness and Gym API',
-        'routes': ['/programs', '/programs/<slug>']
+        'routes': [
+            '/programs',
+            '/programs/<slug>',
+            '/clients',
+            '/clients/export'
+        ]
     })
 
 @app.route('/programs')
@@ -76,6 +134,29 @@ def program_detail(slug):
     if program is None:
         abort(404, description='Program not found')
     return jsonify(program)
+
+
+@app.route('/clients', methods=['GET', 'POST'])
+def clients():
+    if request.method == 'GET':
+        data = service.get_clients()
+        return jsonify({'clients': data, 'count': len(data)})
+
+    payload = request.get_json(silent=True) or {}
+    client, error = service.add_client(payload)
+    if error:
+        return jsonify({'error': error}), 400
+    return jsonify({'message': f"Client {client['name']} saved successfully.", 'client': client}), 201
+
+
+@app.route('/clients/export')
+def export_clients():
+    csv_content = service.export_clients_csv()
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=clients.csv'}
+    )
 
 @app.errorhandler(404)
 def handle_not_found(error):

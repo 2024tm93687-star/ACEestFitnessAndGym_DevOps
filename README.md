@@ -9,6 +9,9 @@ This service exposes simple JSON endpoints for fitness programs:
 1. `GET /` returns a welcome payload and available routes.
 2. `GET /programs` returns all supported program names.
 3. `GET /programs/<slug>` returns details for a specific program, including workout plan, nutrition plan, display color, and calorie factor.
+4. `GET /clients` returns saved client records.
+5. `POST /clients` saves a new client record and calculates estimated calories.
+6. `GET /clients/export` downloads client records as CSV.
 
 The current API content is based on the latest ACEest Tkinter desktop version and has been converted into a Flask-based service for API and DevOps workflows.
 
@@ -153,12 +156,66 @@ Sample response for `GET /programs/fat-loss-fl`:
 {
 	"calorie_factor": 22,
 	"color": "#e74c3c",
-	"diet": "Breakfast: Egg Whites + Oats\nLunch: Grilled Chicken + Brown Rice\nDinner: Fish Curry + Millet Roti\nTarget: ~2000 kcal",
+	"diet": "Egg Whites, Chicken, Fish Curry",
 	"name": "Fat Loss (FL)",
 	"slug": "fat-loss-fl",
-	"workout": "Mon: Back Squat 5x5 + Core\nTue: EMOM 20min Assault Bike\nWed: Bench Press + 21-15-9\nThu: Deadlift + Box Jumps\nFri: Zone 2 Cardio 30min"
+	"workout": "Back Squat, Cardio, Bench, Deadlift, Recovery"
 }
 ```
+
+Sample request for `POST /clients`:
+
+```json
+{
+	"name": "Asha",
+	"age": 28,
+	"weight": 60,
+	"program": "Fat Loss (FL)",
+	"adherence": 85,
+	"notes": "Good consistency"
+}
+```
+
+Sample response for `POST /clients`:
+
+```json
+{
+	"message": "Client Asha saved successfully.",
+	"client": {
+		"name": "Asha",
+		"age": 28,
+		"weight": 60.0,
+		"program": "Fat Loss (FL)",
+		"adherence": 85,
+		"notes": "Good consistency",
+		"estimated_calories": 1320
+	}
+}
+```
+
+Sample response for `GET /clients`:
+
+```json
+{
+	"clients": [
+		{
+			"name": "Asha",
+			"age": 28,
+			"weight": 60.0,
+			"program": "Fat Loss (FL)",
+			"adherence": 85,
+			"notes": "Good consistency",
+			"estimated_calories": 1320
+		}
+	],
+	"count": 1
+}
+```
+
+Sample response headers for `GET /clients/export`:
+
+1. Content-Type: `text/csv`
+2. Content-Disposition: `attachment; filename=clients.csv`
 
 ## CI/CD Integration Overview
 
