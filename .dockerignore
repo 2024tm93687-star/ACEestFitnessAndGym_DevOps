@@ -1,0 +1,15 @@
+.git
+.gitignore
+.github
+.venv
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+.env
+.env.*
+docker-compose.yml
+Jenkinsfile
+test_app.py
