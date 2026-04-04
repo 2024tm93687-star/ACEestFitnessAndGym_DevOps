@@ -442,7 +442,9 @@ The API provides:
 5. `GET /clients`
 6. `POST /clients`
 7. `GET /clients/<name>`
-8. `GET /clients/<name>/summary`
+8. `GET /clients/<name>/membership`
+9. `PATCH /clients/<name>/membership`
+10. `GET /clients/<name>/summary`
 9. `GET /clients/<name>/bmi`
 10. `GET /clients/export`
 11. `POST /progress`
@@ -454,6 +456,8 @@ The API provides:
 17. `GET /metrics/<name>`
 18. `GET /metrics/<name>/weight-chart`
 19. `POST /ai-program`
+20. `GET /clients/<name>/membership`
+21. `PATCH /clients/<name>/membership`
 
 ## Tech Stack
 
@@ -639,6 +643,25 @@ Sample `POST /ai-program` response:
     { "day": "Monday", "exercise": "Running", "sets": 3, "reps": 12 },
     { "day": "Monday", "exercise": "Burpees", "sets": 4, "reps": 10 }
   ]
+}
+```
+
+Sample `GET /clients/Asha/membership` response:
+
+```json
+{
+  "client_name": "Asha",
+  "membership_status": "Active",
+  "membership_expiry": "2026-12-31"
+}
+```
+
+Sample `PATCH /clients/Asha/membership` request:
+
+```json
+{
+  "membership_status": "Expired",
+  "membership_expiry": "2025-12-31"
 }
 ```
 1. GitHub Actions workflow: `.github/workflows/main.yml`
