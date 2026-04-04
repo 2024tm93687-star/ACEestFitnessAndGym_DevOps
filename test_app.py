@@ -19,25 +19,25 @@ def test_list_programs(client):
     response = client.get('/programs')
     assert response.status_code == 200
     data = response.get_json()
-    assert data['programs'] == ['Fat Loss (FL)', 'Muscle Gain (MG)', 'Beginner (BG)']
-    assert data['count'] == 3
+    assert data['programs'] == ['Fat Loss (FL) - 3 day', 'Fat Loss (FL) - 5 day', 'Muscle Gain (MG) - PPL', 'Beginner (BG)']
+    assert data['count'] == 4
 
 
 def test_program_detail_fat_loss(client):
-    response = client.get('/programs/fat-loss-fl')
+    response = client.get('/programs/fat-loss-fl-3-day')
     assert response.status_code == 200
     data = response.get_json()
-    assert data['name'] == 'Fat Loss (FL)'
+    assert data['name'] == 'Fat Loss (FL) - 3 day'
     assert 'Back Squat' in data['workout']
     assert data['color'] == '#e74c3c'
     assert data['calorie_factor'] == 22
 
 
 def test_program_detail_muscle_gain(client):
-    response = client.get('/programs/muscle-gain-mg')
+    response = client.get('/programs/muscle-gain-mg-ppl')
     assert response.status_code == 200
     data = response.get_json()
-    assert data['name'] == 'Muscle Gain (MG)'
+    assert data['name'] == 'Muscle Gain (MG) - PPL'
     assert 'Squat' in data['workout']
     assert data['color'] == '#2ecc71'
     assert data['calorie_factor'] == 35
@@ -61,20 +61,24 @@ def test_invalid_program_returns_404(client):
 
 
 def test_service_program_names():
-    assert service.get_program_names() == ['Fat Loss (FL)', 'Muscle Gain (MG)', 'Beginner (BG)']
+    assert service.get_program_names() == ['Fat Loss (FL) - 3 day', 'Fat Loss (FL) - 5 day', 'Muscle Gain (MG) - PPL', 'Beginner (BG)']
 
 
 def test_create_client_success(client):
     response = client.post('/clients', json={
         'name': 'Asha',
         'age': 28,
+        'height': 165,
         'weight': 60,
-        'program': 'Fat Loss (FL)'
+        'program': 'Fat Loss (FL) - 3 day',
+        'target_weight': 56,
+        'target_adherence': 85
     })
     assert response.status_code == 201
     data = response.get_json()
     assert data['client']['name'] == 'Asha'
     assert data['client']['calories'] == 1320
+    assert data['client']['height'] == 165.0
 
 
 def test_create_client_validation_error(client):
@@ -91,14 +95,15 @@ def test_export_clients_csv(client):
     client.post('/clients', json={
         'name': 'Kumar',
         'age': 35,
+        'height': 175,
         'weight': 72,
-        'program': 'Muscle Gain (MG)'
+        'program': 'Muscle Gain (MG) - PPL'
     })
     response = client.get('/clients/export')
     assert response.status_code == 200
     assert 'text/csv' in response.content_type
     content = response.get_data(as_text=True)
-    assert 'Name,Age,Weight,Program,Calories' in content
+    assert 'Name,Age,Height,Weight,Program,Calories,TargetWeight,TargetAdherence' in content
     assert 'Kumar' in content
 
 
@@ -106,6 +111,7 @@ def test_load_client_by_name(client):
     client.post('/clients', json={
         'name': 'Kavin',
         'age': 31,
+        'height': 170,
         'weight': 70,
         'program': 'Beginner (BG)'
     })
@@ -116,6 +122,23 @@ def test_load_client_by_name(client):
     assert data['name'] == 'Kavin'
     assert data['program'] == 'Beginner (BG)'
     assert data['calories'] == 1820
+
+
+def test_client_summary(client):
+    client.post('/clients', json={
+        'name': 'Arun',
+        'age': 30,
+        'height': 172,
+        'weight': 78,
+        'program': 'Fat Loss (FL) - 5 day'
+    })
+    client.post('/progress', json={'name': 'Arun', 'adherence': 80, 'week': 'Week 04 - 2026'})
+
+    response = client.get('/clients/Arun/summary')
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['client']['program'] == 'Fat Loss (FL) - 5 day'
+    assert data['progress_summary']['weeks_logged'] == 1
 
 
 def test_save_progress(client):
@@ -164,3 +187,56 @@ def test_get_progress_chart_no_data(client):
     assert response.status_code == 404
     data = response.get_json()
     assert data['error'] == 'No progress data available for this client'
+
+
+def test_log_workout_and_get_history(client):
+    response = client.post('/workouts', json={
+        'client_name': 'Asha',
+        'date': '2026-04-04',
+        'workout_type': 'Strength',
+        'duration_min': 60,
+        'notes': 'Good session',
+        'exercises': [
+            {'name': 'Squat', 'sets': 3, 'reps': 5, 'weight': 80}
+        ]
+    })
+    assert response.status_code == 201
+
+    history = client.get('/workouts/Asha')
+    assert history.status_code == 200
+    data = history.get_json()
+    assert data['count'] == 1
+    assert data['workouts'][0]['workout_type'] == 'Strength'
+
+
+def test_log_metrics_and_weight_chart(client):
+    response = client.post('/metrics', json={
+        'client_name': 'Asha',
+        'date': '2026-04-04',
+        'weight': 70,
+        'waist': 84,
+        'bodyfat': 18
+    })
+    assert response.status_code == 201
+
+    chart = client.get('/metrics/Asha/weight-chart')
+    assert chart.status_code == 200
+    data = chart.get_json()
+    assert data['dates'] == ['2026-04-04']
+    assert data['weights'] == [70.0]
+
+
+def test_bmi_endpoint(client):
+    client.post('/clients', json={
+        'name': 'Ravi',
+        'age': 29,
+        'height': 175,
+        'weight': 75,
+        'program': 'Beginner (BG)'
+    })
+
+    response = client.get('/clients/Ravi/bmi')
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['client_name'] == 'Ravi'
+    assert 'category' in data
