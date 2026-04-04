@@ -29,6 +29,7 @@ def test_program_detail_fat_loss(client):
     assert data['name'] == 'Fat Loss (FL)'
     assert 'Assault Bike' in data['workout']
     assert data['color'] == '#e74c3c'
+    assert data['calorie_factor'] == 22
 
 
 def test_program_detail_muscle_gain(client):
@@ -38,6 +39,7 @@ def test_program_detail_muscle_gain(client):
     assert data['name'] == 'Muscle Gain (MG)'
     assert 'Squat 5x5' in data['workout']
     assert data['color'] == '#2ecc71'
+    assert data['calorie_factor'] == 35
 
 
 def test_program_detail_beginner(client):
@@ -45,8 +47,9 @@ def test_program_detail_beginner(client):
     assert response.status_code == 200
     data = response.get_json()
     assert data['name'] == 'Beginner (BG)'
-    assert 'Circuit Training' in data['workout']
+    assert 'Full Body Circuit' in data['workout']
     assert data['color'] == '#3498db'
+    assert data['calorie_factor'] == 26
 
 
 def test_invalid_program_returns_404(client):
