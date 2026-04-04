@@ -1,10 +1,9 @@
-import os
-import io
 import csv
+import io
+import os
 import sqlite3
-from datetime import datetime
 
-from flask import Flask, jsonify, abort, request, Response
+from flask import Flask, Response, abort, jsonify, request
 
 
 class ACEestService:
@@ -44,7 +43,7 @@ class ACEestService:
                 "slug": "beginner-bg",
             },
         }
-        self.slug_map = {data['slug']: name for name, data in self.programs.items()}
+        self.slug_map = {p["slug"]: name for name, p in self.programs.items()}
         self.init_db()
 
     def _connect(self):
@@ -55,27 +54,6 @@ class ACEestService:
     def init_db(self):
         with self._connect() as conn:
             cur = conn.cursor()
-
-            # Align to latest schema by checking required clients columns.
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='clients'")
-            exists = cur.fetchone() is not None
-            if exists:
-                cur.execute("PRAGMA table_info(clients)")
-                cols = {row[1] for row in cur.fetchall()}
-                required = {
-                    "id",
-                    "name",
-                    "age",
-                    "height",
-                    "weight",
-                    "program",
-                    "calories",
-                    "target_weight",
-                    "target_adherence",
-                }
-                if not required.issubset(cols):
-                    cur.execute("DROP TABLE clients")
-
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS clients (
@@ -139,42 +117,35 @@ class ACEestService:
             )
             conn.commit()
 
+    def reset_data(self):
+        with self._connect() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM exercises")
+            cur.execute("DELETE FROM workouts")
+            cur.execute("DELETE FROM metrics")
+            cur.execute("DELETE FROM progress")
+            cur.execute("DELETE FROM clients")
+            conn.commit()
+
     def get_program_names(self):
         return list(self.programs.keys())
 
-    def get_all_programs(self):
-        return [
-            {
-                "name": name,
-                "slug": data["slug"],
-                "workout": data["workout"],
-                "diet": data["diet"],
-                "color": data["color"],
-                "desc": data["desc"],
-                "factor": data["factor"],
-                # Backward-compatible alias for earlier API consumers.
-                "calorie_factor": data["factor"],
-            }
-            for name, data in self.programs.items()
-        ]
-
     def get_program_data(self, slug):
-        program_name = self.slug_map.get(slug)
-        if not program_name:
+        name = self.slug_map.get(slug)
+        if not name:
             return None
-        program = self.programs[program_name].copy()
-        # Backward-compatible alias for earlier API consumers.
-        program["calorie_factor"] = program["factor"]
-        program["name"] = program_name
-        return program
+        data = self.programs[name].copy()
+        data["name"] = name
+        data["calorie_factor"] = data["factor"]
+        return data
 
     def add_client(self, payload):
         name = (payload.get("name") or "").strip()
         program = payload.get("program")
-
-        if not name or not program:
-            return None, "Please fill client name and program."
-
+        if not name:
+            return None, "Name is required"
+        if not program:
+            return None, "Program is required"
         if program not in self.programs:
             return None, "Invalid program selected."
 
@@ -183,9 +154,7 @@ class ACEestService:
         weight = float(payload.get("weight") or 0) or None
         target_weight = float(payload.get("target_weight") or 0) or None
         target_adherence = int(payload.get("target_adherence") or 0) or None
-
-        factor = self.programs[program]["factor"]
-        calories = int(weight * factor) if weight else None
+        calories = int(weight * self.programs[program]["factor"]) if weight else None
 
         with self._connect() as conn:
             cur = conn.cursor()
@@ -195,30 +164,11 @@ class ACEestService:
                 (name, age, height, weight, program, calories, target_weight, target_adherence)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    name,
-                    age,
-                    height,
-                    weight,
-                    program,
-                    calories,
-                    target_weight,
-                    target_adherence,
-                ),
+                (name, age, height, weight, program, calories, target_weight, target_adherence),
             )
             conn.commit()
 
-        client = {
-            "name": name,
-            "age": age,
-            "height": height,
-            "weight": weight,
-            "program": program,
-            "calories": calories,
-            "target_weight": target_weight,
-            "target_adherence": target_adherence,
-        }
-        return client, None
+        return self.get_client(name), None
 
     def get_clients(self):
         with self._connect() as conn:
@@ -247,55 +197,71 @@ class ACEestService:
 
     def get_client_summary(self, name):
         client = self.get_client(name)
-        if client is None:
+        if not client:
             return None
 
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*), AVG(adherence) FROM progress WHERE client_name=?",
-                (name,),
-            )
-            total_weeks, avg_adherence = cur.fetchone()
-            avg_adherence = round(avg_adherence, 1) if avg_adherence is not None else 0
+        progress = self.get_progress(name)
+        metrics = self.get_metrics(name)
+        avg_adherence = 0.0
+        if progress:
+            avg_adherence = round(sum(p["adherence"] for p in progress) / len(progress), 1)
 
-            cur.execute(
-                """
-                SELECT date, weight, waist, bodyfat
-                FROM metrics WHERE client_name=? ORDER BY date DESC LIMIT 1
-                """,
-                (name,),
-            )
-            last_metric = cur.fetchone()
-
-        program_desc = self.programs.get(client["program"], {}).get("desc", "")
         return {
             "client": client,
-            "program_desc": program_desc,
+            "program_desc": self.programs.get(client["program"], {}).get("desc", ""),
             "progress_summary": {
-                "weeks_logged": total_weeks,
+                "weeks_logged": len(progress),
                 "average_adherence": avg_adherence,
             },
-            "last_metric": dict(last_metric) if last_metric else None,
+            "last_metric": metrics[-1] if metrics else None,
         }
 
+    def export_clients_csv(self):
+        rows = self.get_clients()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Name",
+            "Age",
+            "Height",
+            "Weight",
+            "Program",
+            "Calories",
+            "TargetWeight",
+            "TargetAdherence",
+        ])
+        for c in rows:
+            writer.writerow(
+                [
+                    c.get("name"),
+                    c.get("age"),
+                    c.get("height"),
+                    c.get("weight"),
+                    c.get("program"),
+                    c.get("calories"),
+                    c.get("target_weight"),
+                    c.get("target_adherence"),
+                ]
+            )
+        return output.getvalue()
+
     def save_progress(self, payload):
-        name = (payload.get("name") or "").strip()
-        if not name:
-            return None, "Name is required."
+        client_name = (payload.get("name") or "").strip()
+        week = (payload.get("week") or "").strip()
+        adherence = payload.get("adherence")
+        if not client_name or adherence is None or not week:
+            return None, "name, adherence, and week are required."
 
-        adherence = int(payload.get("adherence", 0) or 0)
-        week = payload.get("week") or datetime.now().strftime("Week %U - %Y")
-
+        adherence = int(adherence)
         with self._connect() as conn:
             cur = conn.cursor()
             cur.execute(
                 "INSERT INTO progress (client_name, week, adherence) VALUES (?, ?, ?)",
-                (name, week, adherence),
+                (client_name, week, adherence),
             )
             conn.commit()
 
-        return {"client_name": name, "week": week, "adherence": adherence}, None
+        return {"client_name": client_name, "week": week, "adherence": adherence}, None
 
     def get_progress(self, name):
         with self._connect() as conn:
@@ -308,16 +274,13 @@ class ACEestService:
         return [dict(row) for row in rows]
 
     def get_progress_chart(self, name):
-        records = self.get_progress(name)
-        if not records:
+        rows = self.get_progress(name)
+        if not rows:
             return None
-
-        weeks = [item["week"] for item in records]
-        adherence = [item["adherence"] for item in records]
         return {
             "client_name": name,
-            "weeks": weeks,
-            "adherence": adherence,
+            "weeks": [r["week"] for r in rows],
+            "adherence": [r["adherence"] for r in rows],
         }
 
     def add_workout(self, payload):
@@ -325,11 +288,10 @@ class ACEestService:
         workout_date = (payload.get("date") or "").strip()
         workout_type = (payload.get("workout_type") or "").strip()
         if not client_name or not workout_date or not workout_type:
-            return None, "client_name, date and workout_type are required."
+            return None, "client_name, date, and workout_type are required."
 
         duration_min = int(payload.get("duration_min") or 0)
         notes = (payload.get("notes") or "").strip()
-        exercises = payload.get("exercises") or []
 
         with self._connect() as conn:
             cur = conn.cursor()
@@ -342,10 +304,7 @@ class ACEestService:
             )
             workout_id = cur.lastrowid
 
-            for ex in exercises:
-                name = (ex.get("name") or "").strip()
-                if not name:
-                    continue
+            for ex in payload.get("exercises", []):
                 cur.execute(
                     """
                     INSERT INTO exercises (workout_id, name, sets, reps, weight)
@@ -353,7 +312,7 @@ class ACEestService:
                     """,
                     (
                         workout_id,
-                        name,
+                        ex.get("name"),
                         int(ex.get("sets") or 0),
                         int(ex.get("reps") or 0),
                         float(ex.get("weight") or 0),
@@ -420,7 +379,9 @@ class ACEestService:
             cur.execute(
                 """
                 SELECT date, weight, waist, bodyfat
-                FROM metrics WHERE client_name=? ORDER BY date
+                FROM metrics
+                WHERE client_name=?
+                ORDER BY date, id
                 """,
                 (client_name,),
             )
@@ -428,13 +389,13 @@ class ACEestService:
         return [dict(row) for row in rows]
 
     def get_weight_chart(self, client_name):
-        records = [m for m in self.get_metrics(client_name) if m.get("weight")]
-        if not records:
+        rows = [m for m in self.get_metrics(client_name) if m.get("weight") is not None]
+        if not rows:
             return None
         return {
             "client_name": client_name,
-            "dates": [r["date"] for r in records],
-            "weights": [r["weight"] for r in records],
+            "dates": [r["date"] for r in rows],
+            "weights": [r["weight"] for r in rows],
         }
 
     def get_bmi_info(self, client_name):
@@ -442,13 +403,13 @@ class ACEestService:
         if not client:
             return None, "Client not found"
 
-        height = float(client.get("height") or 0)
+        height_cm = float(client.get("height") or 0)
         weight = float(client.get("weight") or 0)
-        if height <= 0 or weight <= 0:
+        if height_cm <= 0 or weight <= 0:
             return None, "Valid height and weight are required"
 
-        h_m = height / 100.0
-        bmi = round(weight / (h_m * h_m), 1)
+        height_m = height_cm / 100.0
+        bmi = round(weight / (height_m * height_m), 1)
         if bmi < 18.5:
             category = "Underweight"
             risk = "Potential nutrient deficiency, low energy."
@@ -469,199 +430,167 @@ class ACEestService:
             "risk": risk,
         }, None
 
-    def reset_data(self):
-        with self._connect() as conn:
-            cur = conn.cursor()
-            cur.execute("DELETE FROM exercises")
-            cur.execute("DELETE FROM workouts")
-            cur.execute("DELETE FROM metrics")
-            cur.execute("DELETE FROM progress")
-            cur.execute("DELETE FROM clients")
-            conn.commit()
-
-    def export_clients_csv(self):
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow([
-            "Name",
-            "Age",
-            "Height",
-            "Weight",
-            "Program",
-            "Calories",
-            "TargetWeight",
-            "TargetAdherence",
-        ])
-        for client in self.get_clients():
-            writer.writerow([
-                client["name"],
-                client["age"],
-                client.get("height"),
-                client["weight"],
-                client["program"],
-                client["calories"],
-                client.get("target_weight"),
-                client.get("target_adherence"),
-            ])
-        return output.getvalue()
 
 service = ACEestService()
 app = Flask(__name__)
 
-@app.route('/')
+
+@app.route("/")
 def welcome():
-    return jsonify({
-        'message': 'Welcome to ACEest Fitness and Gym API',
-        'routes': [
-            '/programs',
-            '/programs/<slug>',
-            '/clients',
-            '/clients/<name>',
-            '/clients/<name>/summary',
-            '/clients/<name>/bmi',
-            '/clients/export',
-            '/progress',
-            '/progress/<name>',
-            '/progress/<name>/chart',
-            '/workouts',
-            '/workouts/<name>',
-            '/metrics',
-            '/metrics/<name>',
-            '/metrics/<name>/weight-chart'
-        ]
-    })
+    return jsonify(
+        {
+            "message": "Welcome to ACEest Fitness and Gym API",
+            "routes": [
+                "/programs",
+                "/programs/<slug>",
+                "/clients",
+                "/clients/<name>",
+                "/clients/<name>/summary",
+                "/clients/<name>/bmi",
+                "/clients/export",
+                "/progress",
+                "/progress/<name>",
+                "/progress/<name>/chart",
+                "/workouts",
+                "/workouts/<name>",
+                "/metrics",
+                "/metrics/<name>",
+                "/metrics/<name>/weight-chart",
+            ],
+        }
+    )
 
-@app.route('/programs')
-def list_programs():
-    return jsonify({
-        'programs': service.get_program_names(),
-        'count': len(service.get_program_names())
-    })
 
-@app.route('/programs/<slug>')
+@app.route("/programs")
+def programs():
+    names = service.get_program_names()
+    return jsonify({"programs": names, "count": len(names)})
+
+
+@app.route("/programs/<slug>")
 def program_detail(slug):
     program = service.get_program_data(slug)
-    if program is None:
-        abort(404, description='Program not found')
+    if not program:
+        abort(404, description="Program not found")
     return jsonify(program)
 
 
-@app.route('/clients', methods=['GET', 'POST'])
+@app.route("/clients", methods=["GET", "POST"])
 def clients():
-    if request.method == 'GET':
-        data = service.get_clients()
-        return jsonify({'clients': data, 'count': len(data)})
+    if request.method == "GET":
+        rows = service.get_clients()
+        return jsonify({"clients": rows, "count": len(rows)})
 
     payload = request.get_json(silent=True) or {}
     client, error = service.add_client(payload)
     if error:
-        return jsonify({'error': error}), 400
-    return jsonify({'message': f"Client {client['name']} saved successfully.", 'client': client}), 201
+        return jsonify({"error": error}), 400
+    return jsonify({"message": f"Client {client['name']} saved successfully.", "client": client}), 201
 
 
-@app.route('/clients/<name>')
+@app.route("/clients/<name>")
 def client_detail(name):
     client = service.get_client(name)
-    if client is None:
-        abort(404, description='Client not found')
+    if not client:
+        return jsonify({"error": "Client not found"}), 404
     return jsonify(client)
 
 
-@app.route('/clients/<name>/summary')
+@app.route("/clients/<name>/summary")
 def client_summary(name):
     summary = service.get_client_summary(name)
-    if summary is None:
-        abort(404, description='Client not found')
+    if not summary:
+        return jsonify({"error": "Client not found"}), 404
     return jsonify(summary)
 
 
-@app.route('/clients/<name>/bmi')
+@app.route("/clients/<name>/bmi")
 def client_bmi(name):
-    data, error = service.get_bmi_info(name)
+    bmi_info, error = service.get_bmi_info(name)
     if error:
-        if error == 'Client not found':
-            abort(404, description=error)
-        return jsonify({'error': error}), 400
-    return jsonify(data)
+        return jsonify({"error": error}), 404 if error == "Client not found" else 400
+    return jsonify(bmi_info)
 
 
-@app.route('/clients/export')
+@app.route("/clients/export")
 def export_clients():
-    csv_content = service.export_clients_csv()
+    csv_data = service.export_clients_csv()
     return Response(
-        csv_content,
-        mimetype='text/csv',
-        headers={'Content-Disposition': 'attachment; filename=clients.csv'}
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=clients.csv"},
     )
 
 
-@app.route('/progress', methods=['POST'])
+@app.route("/progress", methods=["POST"])
 def progress():
     payload = request.get_json(silent=True) or {}
-    record, error = service.save_progress(payload)
+    progress_data, error = service.save_progress(payload)
     if error:
-        return jsonify({'error': error}), 400
-    return jsonify({'message': 'Weekly progress logged', 'progress': record}), 201
+        return jsonify({"error": error}), 400
+    return jsonify({"message": "Weekly progress logged", "progress": progress_data}), 201
 
 
-@app.route('/progress/<name>')
+@app.route("/progress/<name>")
 def progress_detail(name):
     data = service.get_progress(name)
-    return jsonify({'progress': data, 'count': len(data)})
+    return jsonify({"progress": data, "count": len(data)})
 
 
-@app.route('/progress/<name>/chart')
+@app.route("/progress/<name>/chart")
 def progress_chart(name):
     data = service.get_progress_chart(name)
-    if data is None:
-        return jsonify({'error': 'No progress data available for this client'}), 404
+    if not data:
+        return jsonify({"error": "No progress data available for this client"}), 404
     return jsonify(data)
 
 
-@app.route('/workouts', methods=['POST'])
+@app.route("/workouts", methods=["POST"])
 def workouts():
     payload = request.get_json(silent=True) or {}
     workout, error = service.add_workout(payload)
     if error:
-        return jsonify({'error': error}), 400
-    return jsonify({'message': 'Workout logged successfully', 'workout': workout}), 201
+        return jsonify({"error": error}), 400
+    return jsonify({"message": "Workout logged successfully", "workout": workout}), 201
 
 
-@app.route('/workouts/<name>')
+@app.route("/workouts/<name>")
 def workout_history(name):
     rows = service.get_workouts(name)
-    return jsonify({'workouts': rows, 'count': len(rows)})
+    return jsonify({"workouts": rows, "count": len(rows)})
 
 
-@app.route('/metrics', methods=['POST'])
+@app.route("/metrics", methods=["POST"])
 def metrics():
     payload = request.get_json(silent=True) or {}
     metric, error = service.add_metrics(payload)
     if error:
-        return jsonify({'error': error}), 400
-    return jsonify({'message': 'Metrics logged successfully', 'metric': metric}), 201
+        return jsonify({"error": error}), 400
+    return jsonify({"message": "Metrics logged successfully", "metric": metric}), 201
 
 
-@app.route('/metrics/<name>')
+@app.route("/metrics/<name>")
 def metric_history(name):
     rows = service.get_metrics(name)
-    return jsonify({'metrics': rows, 'count': len(rows)})
+    return jsonify({"metrics": rows, "count": len(rows)})
 
 
-@app.route('/metrics/<name>/weight-chart')
+@app.route("/metrics/<name>/weight-chart")
 def weight_chart(name):
     data = service.get_weight_chart(name)
-    if data is None:
-        return jsonify({'error': 'No weight metrics available for this client'}), 404
+    if not data:
+        return jsonify({"error": "No weight metrics available for this client"}), 404
     return jsonify(data)
+
 
 @app.errorhandler(404)
 def handle_not_found(error):
-    return jsonify({'error': error.description}), 404
+    description = getattr(error, "description", "Not found")
+    return jsonify({"error": description}), 404
 
-if __name__ == '__main__':
-    # Safe defaults for local execution; override via environment variables when needed.
-    host = os.getenv('FLASK_HOST', '127.0.0.1')
-    port = int(os.getenv('FLASK_PORT', '5000'))
-    debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+
+if __name__ == "__main__":
+    host = os.getenv("FLASK_HOST", "127.0.0.1")
+    port = int(os.getenv("FLASK_PORT", "5000"))
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     app.run(host=host, port=port, debug=debug)
