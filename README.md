@@ -12,11 +12,11 @@ This service exposes simple JSON endpoints for fitness programs:
 4. `GET /clients` returns saved client records.
 5. `POST /clients` saves or updates a client record and calculates calories.
 6. `GET /clients/<name>` loads one client by name.
-6. `GET /clients/export` downloads client records as CSV.
+7. `GET /clients/export` downloads client records as CSV.
 7. `POST /progress` saves weekly adherence progress.
 8. `GET /progress/<name>` fetches progress history for a client.
 
-The current API content is based on the latest ACEest Tkinter desktop version and has been converted into a Flask-based service for API and DevOps workflows, including SQLite persistence.
+The current API content is based on the latest ACEest Tkinter desktop version (v2.1.2) and has been converted into a Flask-based service for API and DevOps workflows, including SQLite persistence.
 
 ## Tech Stack
 
@@ -161,7 +161,8 @@ Each program detail response includes:
 3. `workout`
 4. `diet`
 5. `color`
-6. `calorie_factor`
+6. `factor`
+7. `calorie_factor` (backward-compatible alias)
 
 Example program slugs:
 
@@ -173,6 +174,7 @@ Sample response for `GET /programs/fat-loss-fl`:
 
 ```json
 {
+	"factor": 22,
 	"calorie_factor": 22,
 	"color": "#e74c3c",
 	"diet": "Egg Whites, Chicken, Fish Curry",
