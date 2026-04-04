@@ -20,6 +20,17 @@ pipeline {
             steps {
                 script {
                     if (isUnix()) {
+                        // Ensure Python 3, pip, and Docker CLI are available on the Jenkins agent.
+                        sh '''
+                            apt-get update -qq
+                            apt-get install -y -qq python3 python3-venv python3-pip curl ca-certificates gnupg lsb-release
+                            if ! command -v docker > /dev/null 2>&1; then
+                                curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+                                echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
+                                apt-get update -qq
+                                apt-get install -y -qq docker-ce-cli
+                            fi
+                        '''
                         // CI installs requirements-dev.txt because tests run here.
                         // requirements-dev.txt includes requirements.txt plus test tooling.
                         sh '''
