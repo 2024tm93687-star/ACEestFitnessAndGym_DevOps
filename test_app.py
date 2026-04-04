@@ -103,7 +103,7 @@ def test_export_clients_csv(client):
     assert response.status_code == 200
     assert 'text/csv' in response.content_type
     content = response.get_data(as_text=True)
-    assert 'Name,Age,Height,Weight,Program,Calories,TargetWeight,TargetAdherence,MembershipExpiry' in content
+    assert 'Name,Age,Height,Weight,Program,Calories,TargetWeight,TargetAdherence,MembershipExpiry,MembershipStatus' in content
     assert 'Kumar' in content
 
 
@@ -321,8 +321,52 @@ def test_create_client_with_membership_expiry(client):
         'height': 168,
         'weight': 65,
         'program': 'Beginner (BG)',
-        'membership_expiry': '2026-12-31'
+        'membership_expiry': '2026-12-31',
+        'membership_status': 'Active'
     })
     assert response.status_code == 201
     data = response.get_json()
     assert data['client']['membership_expiry'] == '2026-12-31'
+    assert data['client']['membership_status'] == 'Active'
+
+
+def test_get_membership(client):
+    client.post('/clients', json={
+        'name': 'Meena',
+        'age': 33,
+        'height': 168,
+        'weight': 65,
+        'program': 'Beginner (BG)',
+        'membership_expiry': '2026-12-31',
+        'membership_status': 'Active'
+    })
+    response = client.get('/clients/Meena/membership')
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['client_name'] == 'Meena'
+    assert data['membership_status'] == 'Active'
+    assert data['membership_expiry'] == '2026-12-31'
+
+
+def test_update_membership(client):
+    client.post('/clients', json={
+        'name': 'Meena',
+        'age': 33,
+        'height': 168,
+        'weight': 65,
+        'program': 'Beginner (BG)',
+        'membership_status': 'Active'
+    })
+    response = client.patch('/clients/Meena/membership', json={
+        'membership_status': 'Expired',
+        'membership_expiry': '2025-12-31'
+    })
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['membership']['membership_status'] == 'Expired'
+    assert data['membership']['membership_expiry'] == '2025-12-31'
+
+
+def test_membership_client_not_found(client):
+    response = client.get('/clients/Unknown/membership')
+    assert response.status_code == 404
