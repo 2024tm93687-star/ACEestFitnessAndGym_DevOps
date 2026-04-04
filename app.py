@@ -4,9 +4,9 @@ import os
 import random
 import sqlite3
 
-_rng = random.SystemRandom()
-
 from flask import Flask, Response, abort, jsonify, request
+
+_rng = random.SystemRandom()
 
 
 class ACEestService:
