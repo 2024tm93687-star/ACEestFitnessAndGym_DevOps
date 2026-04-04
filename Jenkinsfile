@@ -96,8 +96,6 @@ pipeline {
                             docker rm -f ${env.DEV_CONTAINER} 2>/dev/null || true
                             docker run -d --name ${env.DEV_CONTAINER} \\
                                 -p ${env.DEV_PORT}:5000 \\
-                                -e FLASK_HOST=0.0.0.0 \\
-                                -e FLASK_PORT=5000 \\
                                 --restart unless-stopped \\
                                 ${imageVersion}
                         """
@@ -106,8 +104,6 @@ pipeline {
                             docker rm -f %DEV_CONTAINER% 2>nul || echo DEV container not present
                             docker run -d --name %DEV_CONTAINER% ^
                                 -p %DEV_PORT%:5000 ^
-                                -e FLASK_HOST=0.0.0.0 ^
-                                -e FLASK_PORT=5000 ^
                                 --restart unless-stopped ^
                                 ${imageVersion}
                         """
@@ -133,8 +129,6 @@ pipeline {
                             docker rm -f ${env.PROD_CONTAINER} 2>/dev/null || true
                             docker run -d --name ${env.PROD_CONTAINER} \\
                                 -p ${env.PROD_PORT}:5000 \\
-                                -e FLASK_HOST=0.0.0.0 \\
-                                -e FLASK_PORT=5000 \\
                                 --restart unless-stopped \\
                                 ${imageVersion}
                         """
@@ -143,8 +137,6 @@ pipeline {
                             docker rm -f %PROD_CONTAINER% 2>nul || echo PROD container not present
                             docker run -d --name %PROD_CONTAINER% ^
                                 -p %PROD_PORT%:5000 ^
-                                -e FLASK_HOST=0.0.0.0 ^
-                                -e FLASK_PORT=5000 ^
                                 --restart unless-stopped ^
                                 ${imageVersion}
                         """

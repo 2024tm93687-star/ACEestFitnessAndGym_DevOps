@@ -1,14 +1,9 @@
 services:
-  app:
+  aceest-api:
     build:
       context: .
       dockerfile: Dockerfile
-    image: aceestfitnessandgym-devops:latest
-    container_name: aceestfitnessandgym-app
+    container_name: aceest-fitness-api
     ports:
       - "5000:5000"
-    environment:
-      FLASK_HOST: 0.0.0.0
-      FLASK_PORT: 5000
-      FLASK_DEBUG: "false"
     restart: unless-stopped
