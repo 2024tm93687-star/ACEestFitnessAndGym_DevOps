@@ -8,7 +8,9 @@ This service exposes simple JSON endpoints for fitness programs:
 
 1. `GET /` returns a welcome payload and available routes.
 2. `GET /programs` returns all supported program names.
-3. `GET /programs/<slug>` returns details for a specific program.
+3. `GET /programs/<slug>` returns details for a specific program, including workout plan, nutrition plan, display color, and calorie factor.
+
+The current API content is based on the latest ACEest Tkinter desktop version and has been converted into a Flask-based service for API and DevOps workflows.
 
 ## Tech Stack
 
@@ -79,6 +81,7 @@ python app.py
 
 1. `http://127.0.0.1:5000/`
 2. `http://127.0.0.1:5000/programs`
+3. `http://127.0.0.1:5000/programs/fat-loss-fl`
 
 ### Run Locally with Docker Compose
 
@@ -98,6 +101,7 @@ docker compose ps
 
 1. `http://localhost:5000/`
 2. `http://localhost:5000/programs`
+3. `http://localhost:5000/programs/muscle-gain-mg`
 
 4. Stop services:
 
@@ -124,6 +128,36 @@ python -m pytest -q
 
 ```bash
 python -m pytest test_app.py -v
+```
+
+## API Response Overview
+
+Each program detail response includes:
+
+1. `name`
+2. `slug`
+3. `workout`
+4. `diet`
+5. `color`
+6. `calorie_factor`
+
+Example program slugs:
+
+1. `fat-loss-fl`
+2. `muscle-gain-mg`
+3. `beginner-bg`
+
+Sample response for `GET /programs/fat-loss-fl`:
+
+```json
+{
+	"calorie_factor": 22,
+	"color": "#e74c3c",
+	"diet": "Breakfast: Egg Whites + Oats\nLunch: Grilled Chicken + Brown Rice\nDinner: Fish Curry + Millet Roti\nTarget: ~2000 kcal",
+	"name": "Fat Loss (FL)",
+	"slug": "fat-loss-fl",
+	"workout": "Mon: Back Squat 5x5 + Core\nTue: EMOM 20min Assault Bike\nWed: Bench Press + 21-15-9\nThu: Deadlift + Box Jumps\nFri: Zone 2 Cardio 30min"
+}
 ```
 
 ## CI/CD Integration Overview
