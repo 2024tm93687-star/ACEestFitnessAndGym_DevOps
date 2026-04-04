@@ -15,8 +15,7 @@ COPY requirements.txt .
 # Runtime image installs only production dependencies.
 # Test tools (for example pytest) are intentionally excluded and installed in CI via requirements-dev.txt.
 # Size: install dependencies before copying app code to maximize Docker layer cache reuse.
-#RUN pip install --upgrade pip && pip install -r requirements.txt
-RUN pip install -r requirements.txt
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # Security/Size: copy only runtime application code (avoid shipping tests/docs/secrets by default).
 COPY app.py .
