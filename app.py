@@ -243,7 +243,9 @@ class ACEestService:
         weight = float(payload.get("weight") or 0) or None
         target_weight = float(payload.get("target_weight") or 0) or None
         target_adherence = int(payload.get("target_adherence") or 0) or None
-        membership_expiry = (payload.get("membership_expiry") or "").strip() or None
+        membership_expiry = (
+            (payload.get("membership_expiry") or payload.get("membership_end") or "").strip() or None
+        )
         membership_status = (payload.get("membership_status") or "").strip() or None
         calories = int(weight * self.programs[program]["factor"]) if weight else None
 
@@ -261,6 +263,13 @@ class ACEestService:
 
         return self.get_client(name), None
 
+    def _normalize_client_payload(self, data):
+        if not data:
+            return data
+        normalized = dict(data)
+        normalized["membership_end"] = normalized.get("membership_expiry")
+        return normalized
+
     def get_clients(self):
         with self._connect() as conn:
             cur = conn.cursor()
@@ -272,7 +281,7 @@ class ACEestService:
                 """
             )
             rows = cur.fetchall()
-        return [dict(row) for row in rows]
+        return [self._normalize_client_payload(dict(row)) for row in rows]
 
     def get_client(self, name):
         with self._connect() as conn:
@@ -286,7 +295,7 @@ class ACEestService:
                 (name,),
             )
             row = cur.fetchone()
-        return dict(row) if row else None
+        return self._normalize_client_payload(dict(row)) if row else None
 
     def get_client_summary(self, name):
         client = self.get_client(name)
@@ -486,6 +495,7 @@ class ACEestService:
             "client_name": client_name,
             "membership_status": client.get("membership_status"),
             "membership_expiry": client.get("membership_expiry"),
+            "membership_end": client.get("membership_expiry"),
         }
 
     def update_membership(self, client_name, payload):
@@ -493,7 +503,9 @@ class ACEestService:
         if not client:
             return None, "Client not found"
         status = (payload.get("membership_status") or "").strip() or None
-        expiry = (payload.get("membership_expiry") or "").strip() or None
+        expiry = (
+            (payload.get("membership_expiry") or payload.get("membership_end") or "").strip() or None
+        )
         with self._connect() as conn:
             cur = conn.cursor()
             cur.execute(
