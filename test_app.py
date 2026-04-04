@@ -27,8 +27,9 @@ def test_program_detail_fat_loss(client):
     assert response.status_code == 200
     data = response.get_json()
     assert data['name'] == 'Fat Loss (FL)'
-    assert 'Assault Bike' in data['workout']
+    assert 'Back Squat' in data['workout']
     assert data['color'] == '#e74c3c'
+    assert data['calorie_factor'] == 22
 
 
 def test_program_detail_muscle_gain(client):
@@ -36,8 +37,9 @@ def test_program_detail_muscle_gain(client):
     assert response.status_code == 200
     data = response.get_json()
     assert data['name'] == 'Muscle Gain (MG)'
-    assert 'Squat 5x5' in data['workout']
+    assert 'Squat' in data['workout']
     assert data['color'] == '#2ecc71'
+    assert data['calorie_factor'] == 35
 
 
 def test_program_detail_beginner(client):
@@ -45,8 +47,9 @@ def test_program_detail_beginner(client):
     assert response.status_code == 200
     data = response.get_json()
     assert data['name'] == 'Beginner (BG)'
-    assert 'Circuit Training' in data['workout']
+    assert 'Air Squats' in data['workout']
     assert data['color'] == '#3498db'
+    assert data['calorie_factor'] == 26
 
 
 def test_invalid_program_returns_404(client):
@@ -58,3 +61,45 @@ def test_invalid_program_returns_404(client):
 
 def test_service_program_names():
     assert service.get_program_names() == ['Fat Loss (FL)', 'Muscle Gain (MG)', 'Beginner (BG)']
+
+
+def test_create_client_success(client):
+    response = client.post('/clients', json={
+        'name': 'Asha',
+        'age': 28,
+        'weight': 60,
+        'program': 'Fat Loss (FL)',
+        'adherence': 85,
+        'notes': 'Good consistency'
+    })
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data['client']['name'] == 'Asha'
+    assert data['client']['estimated_calories'] == 1320
+
+
+def test_create_client_validation_error(client):
+    response = client.post('/clients', json={
+        'name': '',
+        'program': ''
+    })
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data['error'] == 'Please fill client name and program.'
+
+
+def test_export_clients_csv(client):
+    client.post('/clients', json={
+        'name': 'Kumar',
+        'age': 35,
+        'weight': 72,
+        'program': 'Muscle Gain (MG)',
+        'adherence': 70,
+        'notes': 'Needs sleep improvement'
+    })
+    response = client.get('/clients/export')
+    assert response.status_code == 200
+    assert 'text/csv' in response.content_type
+    content = response.get_data(as_text=True)
+    assert 'Name,Age,Weight,Program,Adherence,Notes' in content
+    assert 'Kumar' in content

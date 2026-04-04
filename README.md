@@ -8,7 +8,12 @@ This service exposes simple JSON endpoints for fitness programs:
 
 1. `GET /` returns a welcome payload and available routes.
 2. `GET /programs` returns all supported program names.
-3. `GET /programs/<slug>` returns details for a specific program.
+3. `GET /programs/<slug>` returns details for a specific program, including workout plan, nutrition plan, display color, and calorie factor.
+4. `GET /clients` returns saved client records.
+5. `POST /clients` saves a new client record and calculates estimated calories.
+6. `GET /clients/export` downloads client records as CSV.
+
+The current API content is based on the latest ACEest Tkinter desktop version and has been converted into a Flask-based service for API and DevOps workflows.
 
 ## Tech Stack
 
@@ -79,6 +84,7 @@ python app.py
 
 1. `http://127.0.0.1:5000/`
 2. `http://127.0.0.1:5000/programs`
+3. `http://127.0.0.1:5000/programs/fat-loss-fl`
 
 ### Run Locally with Docker Compose
 
@@ -98,6 +104,7 @@ docker compose ps
 
 1. `http://localhost:5000/`
 2. `http://localhost:5000/programs`
+3. `http://localhost:5000/programs/muscle-gain-mg`
 
 4. Stop services:
 
@@ -125,6 +132,90 @@ python -m pytest -q
 ```bash
 python -m pytest test_app.py -v
 ```
+
+## API Response Overview
+
+Each program detail response includes:
+
+1. `name`
+2. `slug`
+3. `workout`
+4. `diet`
+5. `color`
+6. `calorie_factor`
+
+Example program slugs:
+
+1. `fat-loss-fl`
+2. `muscle-gain-mg`
+3. `beginner-bg`
+
+Sample response for `GET /programs/fat-loss-fl`:
+
+```json
+{
+	"calorie_factor": 22,
+	"color": "#e74c3c",
+	"diet": "Egg Whites, Chicken, Fish Curry",
+	"name": "Fat Loss (FL)",
+	"slug": "fat-loss-fl",
+	"workout": "Back Squat, Cardio, Bench, Deadlift, Recovery"
+}
+```
+
+Sample request for `POST /clients`:
+
+```json
+{
+	"name": "Asha",
+	"age": 28,
+	"weight": 60,
+	"program": "Fat Loss (FL)",
+	"adherence": 85,
+	"notes": "Good consistency"
+}
+```
+
+Sample response for `POST /clients`:
+
+```json
+{
+	"message": "Client Asha saved successfully.",
+	"client": {
+		"name": "Asha",
+		"age": 28,
+		"weight": 60.0,
+		"program": "Fat Loss (FL)",
+		"adherence": 85,
+		"notes": "Good consistency",
+		"estimated_calories": 1320
+	}
+}
+```
+
+Sample response for `GET /clients`:
+
+```json
+{
+	"clients": [
+		{
+			"name": "Asha",
+			"age": 28,
+			"weight": 60.0,
+			"program": "Fat Loss (FL)",
+			"adherence": 85,
+			"notes": "Good consistency",
+			"estimated_calories": 1320
+		}
+	],
+	"count": 1
+}
+```
+
+Sample response headers for `GET /clients/export`:
+
+1. Content-Type: `text/csv`
+2. Content-Disposition: `attachment; filename=clients.csv`
 
 ## CI/CD Integration Overview
 
