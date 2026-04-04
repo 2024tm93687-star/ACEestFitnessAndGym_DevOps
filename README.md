@@ -424,32 +424,36 @@ A Flask API converted from ACEest Tkinter v3.0.1 for client management, progress
 
 The API provides:
 
-1. Program definitions with calorie factors and descriptions.
-2. Persistent client profiles with goals.
-3. Weekly adherence tracking and chart-ready data.
-4. Workout logging with optional exercise entries.
-5. Body metrics logging (weight, waist, bodyfat).
-6. BMI and risk insight endpoint.
+1. User authentication with role-based login.
+2. Program definitions with calorie factors and descriptions.
+3. Persistent client profiles with goals and membership expiry.
+4. Weekly adherence tracking and chart-ready data.
+5. Workout logging with optional exercise entries.
+6. Body metrics logging (weight, waist, bodyfat).
+7. BMI and risk insight endpoint.
+8. AI-generated weekly workout plan based on experience level.
 
 ## Main Endpoints
 
-1. `GET /`
-2. `GET /programs`
-3. `GET /programs/<slug>`
-4. `GET /clients`
-5. `POST /clients`
-6. `GET /clients/<name>`
-7. `GET /clients/<name>/summary`
-8. `GET /clients/<name>/bmi`
-9. `GET /clients/export`
-10. `POST /progress`
-11. `GET /progress/<name>`
-12. `GET /progress/<name>/chart`
-13. `POST /workouts`
-14. `GET /workouts/<name>`
-15. `POST /metrics`
-16. `GET /metrics/<name>`
-17. `GET /metrics/<name>/weight-chart`
+1. `POST /auth/login`
+2. `GET /`
+3. `GET /programs`
+4. `GET /programs/<slug>`
+5. `GET /clients`
+6. `POST /clients`
+7. `GET /clients/<name>`
+8. `GET /clients/<name>/summary`
+9. `GET /clients/<name>/bmi`
+10. `GET /clients/export`
+11. `POST /progress`
+12. `GET /progress/<name>`
+13. `GET /progress/<name>/chart`
+14. `POST /workouts`
+15. `GET /workouts/<name>`
+16. `POST /metrics`
+17. `GET /metrics/<name>`
+18. `GET /metrics/<name>/weight-chart`
+19. `POST /ai-program`
 
 ## Tech Stack
 
@@ -495,6 +499,25 @@ python app.py
 
 ## API Samples
 
+Sample `POST /auth/login` request:
+
+```json
+{
+  "username": "admin",
+  "password": "admin"
+}
+```
+
+Sample `POST /auth/login` response:
+
+```json
+{
+  "message": "Login successful",
+  "username": "admin",
+  "role": "Admin"
+}
+```
+
 Sample `GET /programs/fat-loss-fl-3-day`:
 
 ```json
@@ -520,17 +543,8 @@ Sample `POST /clients` request:
 	"weight": 60,
 	"program": "Fat Loss (FL) - 3 day",
 	"target_weight": 56,
-	"target_adherence": 85
-}
-```
-
-Sample `GET /clients/Asha/summary` response:
-
-```json
-{
-	"client": {
-		"name": "Asha",
-		"age": 28,
+  "target_adherence": 85,
+  "membership_expiry": "2026-12-31"
 		"height": 165.0,
 		"weight": 60.0,
 		"program": "Fat Loss (FL) - 3 day",
@@ -605,13 +619,27 @@ Sample `GET /metrics/Asha/weight-chart` response:
 }
 ```
 
-## Tests
+Sample `POST /ai-program` request:
 
-```bash
-python -m pytest -q
+```json
+{
+  "client_name": "Asha",
+  "experience": "intermediate"
+}
 ```
 
-## CI/CD
+Sample `POST /ai-program` response:
 
+```json
+{
+  "client_name": "Asha",
+  "experience": "intermediate",
+  "days": 4,
+  "plan": [
+    { "day": "Monday", "exercise": "Running", "sets": 3, "reps": 12 },
+    { "day": "Monday", "exercise": "Burpees", "sets": 4, "reps": 10 }
+  ]
+}
+```
 1. GitHub Actions workflow: `.github/workflows/main.yml`
 2. Jenkins pipeline: `Jenkinsfile`
