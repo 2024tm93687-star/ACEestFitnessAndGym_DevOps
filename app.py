@@ -8,6 +8,7 @@ from flask import Flask, Response, abort, jsonify, request
 
 _rng = random.SystemRandom()
 
+
 class ACEestService:
     def __init__(self):
         self.db_name = os.getenv("ACEEST_DB_NAME", "aceest_fitness.db")
