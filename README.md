@@ -15,6 +15,7 @@ This API supports:
 7. Metrics and BMI insights
 8. AI-style workout plan generation
 
+
 ## Endpoints
 
 1. `POST /auth/login`
