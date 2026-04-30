@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        choice(name: 'DEPLOYMENT_STRATEGY', choices: ['rolling-update', 'blue-green', 'canary', 'shadow', 'ab-test'], description: 'Deployment methodology to use for the release.')
+        choice(name: 'DEPLOYMENT_STRATEGY', choices: ['canary', 'rolling-update', 'blue-green', 'shadow', 'ab-test'], description: 'Deployment methodology to use for the release.')
         choice(name: 'BLUE_GREEN_TARGET', choices: ['green', 'blue'], description: 'Target slot for blue-green deployments.')
         choice(name: 'ROLLBACK_TO', choices: ['none', 'blue', 'green'], description: 'For blue-green only: switch service traffic back to this slot without deploying a new image.')
         string(name: 'STABLE_REPLICAS', defaultValue: '3', description: 'Stable pod count for canary and A/B traffic distribution.')
