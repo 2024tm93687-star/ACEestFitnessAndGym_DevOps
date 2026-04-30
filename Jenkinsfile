@@ -51,10 +51,10 @@ pipeline {
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Build and Push Docker Image to github Container Registry') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
+                    withCredentials([usernamePassword(credentialsId: 'github-creds-container', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
                         def imageVersion = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
                         def imageLatest = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:latest"
 
@@ -102,7 +102,7 @@ pipeline {
             }
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
+                    withCredentials([usernamePassword(credentialsId: 'github-creds-container', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
                         def imageVersion = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
 
                         if (isUnix()) {
