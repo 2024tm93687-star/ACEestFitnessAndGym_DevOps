@@ -2,11 +2,11 @@ pipeline {
     agent any
 
     environment {
-        APP_IMAGE = 'aceest-fitness-app'
-        DEV_CONTAINER = 'aceest-fitness-api-dev'
-        PROD_CONTAINER = 'aceest-fitness-api-prod'
-        DEV_PORT = '5001'
-        PROD_PORT = '5000'
+        REGISTRY = 'ghcr.io'
+        REGISTRY_OWNER = '2024tm93687-star'
+        IMAGE_NAME = 'aceest-fitness-app'
+        K8S_DEPLOYMENT = 'aceest-fitness-api'
+        K8S_CONTAINER = 'aceest-fitness-api'
     }
 
     stages {
@@ -51,17 +51,30 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build and Push Docker Image') {
             steps {
                 script {
-                    def imageVersion = "${env.APP_IMAGE}:${env.BUILD_NUMBER}"
-                    def imageLatest = "${env.APP_IMAGE}:latest"
+                    withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
+                        def imageVersion = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
+                        def imageLatest = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:latest"
 
-                    // Docker commands are usually the same across platforms if Docker Desktop is installed
-                    if (isUnix()) {
-                        sh "docker build -t ${imageVersion} -t ${imageLatest} ."
-                    } else {
-                        bat "docker build -t ${imageVersion} -t ${imageLatest} ."
+                        if (isUnix()) {
+                            sh """
+                                echo "${GITHUB_TOKEN}" | docker login ${env.REGISTRY} -u "${GITHUB_USERNAME}" --password-stdin
+                                docker build -t ${imageVersion} -t ${imageLatest} .
+                                docker push ${imageVersion}
+                                docker push ${imageLatest}
+                                docker logout ${env.REGISTRY}
+                            """
+                        } else {
+                            bat """
+                                echo %GITHUB_TOKEN% | docker login ${env.REGISTRY} -u %GITHUB_USERNAME% --password-stdin
+                                docker build -t ${imageVersion} -t ${imageLatest} .
+                                docker push ${imageVersion}
+                                docker push ${imageLatest}
+                                docker logout ${env.REGISTRY}
+                            """
+                        }
                     }
                 }
             }
@@ -79,67 +92,34 @@ pipeline {
             }
         }
 
-        stage('Deploy to DEV') {
+        stage('Deploy to Minikube') {
             when {
                 expression {
                     def rawBranch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: ''
                     def normalizedBranch = rawBranch.replaceFirst('^origin/', '').replaceFirst('^refs/heads/', '')
-                    return normalizedBranch == 'develop'
+                    return normalizedBranch == 'main' || normalizedBranch == 'develop'
                 }
             }
             steps {
                 script {
-                    def imageVersion = "${env.APP_IMAGE}:${env.BUILD_NUMBER}"
+                    withCredentials([usernamePassword(credentialsId: 'github-creds', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
+                        def imageVersion = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
 
-                    if (isUnix()) {
-                        sh """
-                            docker rm -f ${env.DEV_CONTAINER} 2>/dev/null || true
-                            docker run -d --name ${env.DEV_CONTAINER} \\
-                                -p ${env.DEV_PORT}:5000 \\
-                                --restart unless-stopped \\
-                                ${imageVersion}
-                        """
-                    } else {
-                        bat """
-                            docker rm -f %DEV_CONTAINER% 2>nul || echo DEV container not present
-                            docker run -d --name %DEV_CONTAINER% ^
-                                -p %DEV_PORT%:5000 ^
-                                --restart unless-stopped ^
-                                ${imageVersion}
-                        """
-                    }
-                }
-            }
-        }
-
-        stage('Deploy to PROD') {
-            when {
-                expression {
-                    def rawBranch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: ''
-                    def normalizedBranch = rawBranch.replaceFirst('^origin/', '').replaceFirst('^refs/heads/', '')
-                    return normalizedBranch == 'main'
-                }
-            }
-            steps {
-                script {
-                    def imageVersion = "${env.APP_IMAGE}:${env.BUILD_NUMBER}"
-
-                    if (isUnix()) {
-                        sh """
-                            docker rm -f ${env.PROD_CONTAINER} 2>/dev/null || true
-                            docker run -d --name ${env.PROD_CONTAINER} \\
-                                -p ${env.PROD_PORT}:5000 \\
-                                --restart unless-stopped \\
-                                ${imageVersion}
-                        """
-                    } else {
-                        bat """
-                            docker rm -f %PROD_CONTAINER% 2>nul || echo PROD container not present
-                            docker run -d --name %PROD_CONTAINER% ^
-                                -p %PROD_PORT%:5000 ^
-                                --restart unless-stopped ^
-                                ${imageVersion}
-                        """
+                        if (isUnix()) {
+                            sh """
+                                kubectl apply -f k8s/deployment.yaml
+                                kubectl apply -f k8s/service.yaml
+                                kubectl set image deployment/${env.K8S_DEPLOYMENT} ${env.K8S_CONTAINER}=${imageVersion}
+                                kubectl rollout status deployment/${env.K8S_DEPLOYMENT}
+                            """
+                        } else {
+                            bat """
+                                kubectl apply -f k8s/deployment.yaml
+                                kubectl apply -f k8s/service.yaml
+                                kubectl set image deployment/%K8S_DEPLOYMENT% %K8S_CONTAINER%=${imageVersion}
+                                kubectl rollout status deployment/%K8S_DEPLOYMENT%
+                            """
+                        }
                     }
                 }
             }

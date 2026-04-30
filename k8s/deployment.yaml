@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aceest-fitness-api
+  labels:
+    app: aceest-fitness-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aceest-fitness-api
+  template:
+    metadata:
+      labels:
+        app: aceest-fitness-api
+    spec:
+      containers:
+        - name: aceest-fitness-api
+          image: ghcr.io/2024tm93687-star/aceest-fitness-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
