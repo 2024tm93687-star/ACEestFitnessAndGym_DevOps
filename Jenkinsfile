@@ -102,7 +102,10 @@ pipeline {
             }
             steps {
                 script {
-                    withCredentials([file(credentialsId: 'minikube-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
+                    withCredentials([
+                        file(credentialsId: 'minikube-kubeconfig', variable: 'KUBECONFIG_FILE'),
+                        usernamePassword(credentialsId: 'github-creds-container', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')
+                    ]) {
                         def imageVersion = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
 
                         if (isUnix()) {
@@ -110,20 +113,26 @@ pipeline {
                                 export KUBECONFIG="\$KUBECONFIG_FILE"
                                 kubectl config current-context
                                 kubectl cluster-info
+                                kubectl create secret docker-registry ghcr-pull-secret \
+                                    --docker-server=${env.REGISTRY} \
+                                    --docker-username="\$GITHUB_USERNAME" \
+                                    --docker-password="\$GITHUB_TOKEN" \
+                                    --dry-run=client -o yaml | kubectl apply -f -
                                 kubectl apply -f k8s/deployment.yaml
                                 kubectl apply -f k8s/service.yaml
                                 kubectl set image deployment/${env.K8S_DEPLOYMENT} ${env.K8S_CONTAINER}=${imageVersion}
-                                kubectl rollout status deployment/${env.K8S_DEPLOYMENT}
+                                kubectl rollout status deployment/${env.K8S_DEPLOYMENT} --timeout=180s
                             """
                         } else {
                             bat """
                                 set "KUBECONFIG=%KUBECONFIG_FILE%"
                                 kubectl config current-context
                                 kubectl cluster-info
+                                kubectl create secret docker-registry ghcr-pull-secret --docker-server=${env.REGISTRY} --docker-username=%GITHUB_USERNAME% --docker-password=%GITHUB_TOKEN% --dry-run=client -o yaml | kubectl apply -f -
                                 kubectl apply -f k8s/deployment.yaml
                                 kubectl apply -f k8s/service.yaml
                                 kubectl set image deployment/%K8S_DEPLOYMENT% %K8S_CONTAINER%=${imageVersion}
-                                kubectl rollout status deployment/%K8S_DEPLOYMENT%
+                                kubectl rollout status deployment/%K8S_DEPLOYMENT% --timeout=180s
                             """
                         }
                     }
