@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 # Size: use the slim Python base image to reduce final image footprint.
 
 # Security: disable .pyc generation and force unbuffered logs for predictable runtime behavior.
@@ -27,5 +27,18 @@ RUN chown -R app:app /app
 USER app
 
 EXPOSE 5000
+
+FROM base AS test
+
+USER root
+
+COPY requirements-dev.txt test_app.py ./
+RUN pip install -r requirements-dev.txt && chown -R app:app /app
+
+USER app
+
+CMD ["python", "-m", "pytest", "test_app.py", "-v"]
+
+FROM base AS runtime
 
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
