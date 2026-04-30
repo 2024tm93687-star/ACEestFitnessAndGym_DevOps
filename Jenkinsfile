@@ -102,11 +102,14 @@ pipeline {
             }
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'github-creds-container', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
+                    withCredentials([file(credentialsId: 'minikube-kubeconfig', variable: 'KUBECONFIG_FILE')]) {
                         def imageVersion = "${env.REGISTRY}/${env.REGISTRY_OWNER}/${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
 
                         if (isUnix()) {
                             sh """
+                                export KUBECONFIG="\$KUBECONFIG_FILE"
+                                kubectl config current-context
+                                kubectl cluster-info
                                 kubectl apply -f k8s/deployment.yaml
                                 kubectl apply -f k8s/service.yaml
                                 kubectl set image deployment/${env.K8S_DEPLOYMENT} ${env.K8S_CONTAINER}=${imageVersion}
@@ -114,6 +117,9 @@ pipeline {
                             """
                         } else {
                             bat """
+                                set "KUBECONFIG=%KUBECONFIG_FILE%"
+                                kubectl config current-context
+                                kubectl cluster-info
                                 kubectl apply -f k8s/deployment.yaml
                                 kubectl apply -f k8s/service.yaml
                                 kubectl set image deployment/%K8S_DEPLOYMENT% %K8S_CONTAINER%=${imageVersion}
