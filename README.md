@@ -15,7 +15,6 @@ This API supports:
 7. Metrics and BMI insights
 8. AI-style workout plan generation
 
-
 ## Endpoints
 
 1. `POST /auth/login`
@@ -118,3 +117,13 @@ python -m pytest -q
 5. Docker and Docker Compose
 6. GitHub Actions
 7. Jenkins
+
+## Repository Files
+
+1. `app.py` - main Flask application
+2. `requirements.txt` - runtime dependencies
+3. `requirements-dev.txt` - development and test dependencies
+4. `test_app.py` - Pytest test suite
+5. `Dockerfile` - container build definition
+6. `.github/workflows/main.yml` - GitHub Actions workflow
+7. `README.md` - setup and usage documentation
