@@ -12,4 +12,3 @@ __pycache__
 .env.*
 docker-compose.yml
 Jenkinsfile
-test_app.py
