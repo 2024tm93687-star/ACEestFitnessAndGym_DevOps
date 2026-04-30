@@ -8,7 +8,6 @@ pipeline {
         string(name: 'STABLE_REPLICAS', defaultValue: '3', description: 'Stable pod count for canary and A/B traffic distribution.')
         string(name: 'CANARY_REPLICAS', defaultValue: '1', description: 'Canary or B-variant pod count.')
     }
-
     environment {
         REGISTRY = 'ghcr.io'
         REGISTRY_OWNER = '2024tm93687-star'
