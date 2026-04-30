@@ -89,7 +89,7 @@ pipeline {
                 expression { params.ROLLBACK_TO == 'none' }
             }
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 15, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
