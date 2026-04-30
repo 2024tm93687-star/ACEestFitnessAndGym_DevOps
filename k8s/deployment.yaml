@@ -14,6 +14,8 @@ spec:
       labels:
         app: aceest-fitness-api
     spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
       containers:
         - name: aceest-fitness-api
           image: ghcr.io/2024tm93687-star/aceest-fitness-app:latest
