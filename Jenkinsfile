@@ -51,7 +51,7 @@ pipeline {
             }
         }
 
-        stage('Build and Push Docker Image') {
+        stage('Build and Push Docker Image to github Container Registry') {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'github-creds-container', usernameVariable: 'GITHUB_USERNAME', passwordVariable: 'GITHUB_TOKEN')]) {
